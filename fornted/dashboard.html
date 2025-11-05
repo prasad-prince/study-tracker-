@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Student Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f0f8ff;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background-color: #4CAF50;
+      color: white;
+      padding: 15px;
+      text-align: center;
+      font-size: 24px;
+      position: relative;
+    }
+    .logout-btn {
+      position: absolute;
+      right: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      background-color: #ff4444;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.3s;
+    }
+    .logout-btn:hover {
+      background-color: #cc0000;
+    }
+    .dark-toggle-btn {
+      position: absolute;
+      right: 120px;
+      top: 50%;
+      transform: translateY(-50%);
+      background-color: #666;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.3s;
+    }
+    .dark-toggle-btn:hover {
+      background-color: #555;
+    }
+    body.dark-mode {
+      background-color: #1a1a1a;
+      color: #f0f0f0;
+    }
+    body.dark-mode .card {
+      background-color: #2d2d2d;
+      color: #f0f0f0;
+    }
+    body.dark-mode .card-header {
+      background-color: #3d3d3d;
+      color: #f0f0f0;
+    }
+    .dashboard {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      padding: 30px;
+      gap: 20px;
+    }
+    .card {
+      background-color: white;
+      width: 220px;
+      height: 180px;
+      border-radius: 15px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      text-align: center;
+      padding: 20px;
+      transition: transform 0.2s;
+    }
+    .card:hover {
+      transform: scale(1.05);
+    }
+    .card i {
+      font-size: 40px;
+      margin-bottom: 15px;
+      color: #4CAF50;
+    }
+    .card a {
+      text-decoration: none;
+      color: #333;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    footer {
+      text-align: center;
+      padding: 15px;
+      background-color: #4CAF50;
+      color: white;
+      position: fixed;
+      width: 100%;
+      bottom: 0;
+    }
+
+    @media screen and (max-width: 600px) {
+      .dashboard {
+        flex-direction: column;
+        align-items: center;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    🎓 My Student Dashboard
+    <button id="darkToggleBtn" class="dark-toggle-btn">🌓 Dark</button>
+    <button id="logoutBtn" class="logout-btn">Logout</button>
+  </header>
+
+  <div class="dashboard">
+    <div class="card">
+      <i class="fas fa-book"></i>
+      <a href="notes.html">My Notes</a>
+    </div>
+    <div class="card">
+      <i class="fas fa-calculator"></i>
+      <a href="calculator.html">Calculator</a>
+    </div>
+    
+    <!-- Tasks Section (simplified) -->
+    <div class="card">
+      <i class="fas fa-tasks"></i>
+      <a href="tasks.html">My Tasks</a>
+    </div>
+    
+    <div class="card">
+      <i class="fas fa-user-friends"></i>
+      <a href="contact.html">Contact</a>
+    </div>
+    <div class="card">
+      <i class="fas fa-robot"></i>
+      <a href="assistant.html">AI Assistant</a>
+    </div>
+  </div>
+
+  <footer>made by Nimesh, Vamshi, Harsh, Prince, Om</footer>
+
+  <script src="js/script.js"></script>
+  <script>
+    // (removed) dynamic task loading for a simpler dashboard
+
+    // Dark mode toggle
+    function toggleDarkMode() {
+      document.body.classList.toggle('dark-mode');
+      const isDark = document.body.classList.contains('dark-mode');
+      const btn = document.getElementById('darkToggleBtn');
+      btn.textContent = isDark ? '☀️ Light' : '🌓 Dark';
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    }
+
+    // Load saved theme
+    function loadTheme() {
+      const savedTheme = localStorage.getItem('theme') || 'light';
+      if (savedTheme === 'dark') {
+        document.body.classList.add('dark-mode');
+        document.getElementById('darkToggleBtn').textContent = '☀️ Light';
+      }
+    }
+
+    // Event listeners
+    document.getElementById('darkToggleBtn').addEventListener('click', toggleDarkMode);
+
+    // Load theme when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      loadTheme();
+    });
+  </script>
+</body>
+</html>
