@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Calculator | Study Tracker</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
   <link rel="stylesheet" href="css/style.css"/>
   <style>
     .calculator {
@@ -45,53 +46,136 @@
 <body class="light-mode">
 
 <div class="container mt-5">
-  <h2 class="text-center mb-4">Calculator</h2>
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="text-center flex-grow-1"><i class="fas fa-calculator"></i> Calculator</h2>
+    <div>
+      <a href="dashboard.html" class="btn btn-outline-primary me-2">
+        <i class="fas fa-arrow-left"></i> Back
+      </a>
+      <button class="btn btn-outline-dark" onclick="toggleDarkMode()">
+        <i class="fas fa-moon"></i> Dark Mode
+      </button>
+    </div>
+  </div>
 
   <div class="calculator">
-    <input type="text" id="display" class="form-control text-end mb-3" readonly />
+    <div class="small text-muted text-end" id="history"></div>
+    <input type="text" id="display" class="form-control text-end mb-3" placeholder="0" readonly />
 
     <div class="row g-2">
+      <div class="col-3"><button class="btn btn-outline-danger w-100" onclick="clearAll()"><i class="fa-solid fa-a"></i><sub>C</sub></button></div>
+      <div class="col-3"><button class="btn btn-outline-secondary w-100" onclick="deleteLast()"><i class="fa-solid fa-delete-left"></i></button></div>
+      <div class="col-3"><button class="btn btn-outline-secondary w-100" onclick="percent()">%</button></div>
+      <div class="col-3"><button class="btn btn-warning w-100" onclick="appendOperator('/')">/</button></div>
+
       <div class="col-3"><button class="btn btn-secondary w-100" onclick="appendValue('7')">7</button></div>
       <div class="col-3"><button class="btn btn-secondary w-100" onclick="appendValue('8')">8</button></div>
       <div class="col-3"><button class="btn btn-secondary w-100" onclick="appendValue('9')">9</button></div>
-      <div class="col-3"><button class="btn btn-danger w-100" onclick="clearDisplay()">C</button></div>
+      <div class="col-3"><button class="btn btn-warning w-100" onclick="appendOperator('*')">*</button></div>
 
       <div class="col-3"><button class="btn btn-secondary w-100" onclick="appendValue('4')">4</button></div>
       <div class="col-3"><button class="btn btn-secondary w-100" onclick="appendValue('5')">5</button></div>
       <div class="col-3"><button class="btn btn-secondary w-100" onclick="appendValue('6')">6</button></div>
-      <div class="col-3"><button class="btn btn-warning w-100" onclick="appendValue('+')">+</button></div>
+      <div class="col-3"><button class="btn btn-warning w-100" onclick="appendOperator('-')">-</button></div>
 
       <div class="col-3"><button class="btn btn-secondary w-100" onclick="appendValue('1')">1</button></div>
       <div class="col-3"><button class="btn btn-secondary w-100" onclick="appendValue('2')">2</button></div>
       <div class="col-3"><button class="btn btn-secondary w-100" onclick="appendValue('3')">3</button></div>
-      <div class="col-3"><button class="btn btn-warning w-100" onclick="appendValue('-')">-</button></div>
+      <div class="col-3"><button class="btn btn-warning w-100" onclick="appendOperator('+')">+</button></div>
 
+      <div class="col-3"><button class="btn btn-outline-secondary w-100" onclick="toggleSign()">+/-</button></div>
       <div class="col-3"><button class="btn btn-secondary w-100" onclick="appendValue('0')">0</button></div>
-      <div class="col-3"><button class="btn btn-secondary w-100" onclick="appendValue('.')">.</button></div>
+      <div class="col-3"><button class="btn btn-secondary w-100" onclick="appendDot()">.</button></div>
       <div class="col-3"><button class="btn btn-success w-100" onclick="calculate()">=</button></div>
-      <div class="col-3"><button class="btn btn-warning w-100" onclick="appendValue('*')">*</button></div>
-
-      <div class="col-3 offset-9"><button class="btn btn-warning w-100" onclick="appendValue('/')">/</button></div>
     </div>
   </div>
 
-  <div class="text-center mt-4">
-    <button class="btn btn-outline-dark" onclick="toggleDarkMode()">Toggle Dark Mode</button>
-  </div>
 </div>
 
 <script>
+  function getDisplay() { return document.getElementById('display'); }
+
   function appendValue(value) {
-    document.getElementById('display').value += value;
+    const display = getDisplay();
+    display.value += value;
   }
 
-  function clearDisplay() {
-    document.getElementById('display').value = '';
+  function appendOperator(op) {
+    const display = getDisplay();
+    const v = display.value;
+    if (!v) return; // don't start with operator
+    if (/[+\-*/]$/.test(v)) {
+      display.value = v.replace(/[+\-*/]$/, op);
+    } else {
+      display.value += op;
+    }
+  }
+
+  function clearAll() {
+    getDisplay().value = '';
+    document.getElementById('history').textContent = '';
+  }
+
+  function deleteLast() {
+    const display = getDisplay();
+    display.value = display.value.slice(0, -1);
+  }
+
+  function appendDot() {
+    const display = getDisplay();
+    const v = display.value;
+    const parts = v.split(/[+\-*/]/);
+    const last = parts[parts.length - 1];
+    if (!last.includes('.')) display.value += '.';
+  }
+
+  function toggleSign() {
+    const display = getDisplay();
+    const v = display.value;
+    if (!v) return;
+    const parts = v.split(/([+\-*/])/);
+    // Find last number index
+    for (let i = parts.length - 1; i >= 0; i--) {
+      if (!/[+\-*/]/.test(parts[i]) && parts[i] !== '') {
+        const num = parts[i].startsWith('-') ? parts[i].slice(1) : '-' + parts[i];
+        parts[i] = num;
+        display.value = parts.join('');
+        return;
+      }
+    }
+  }
+
+  function percent() {
+    const display = getDisplay();
+    const v = display.value;
+    if (!v) return;
+    try {
+      // Apply % to the last number only
+      const parts = v.split(/([+\-*/])/);
+      for (let i = parts.length - 1; i >= 0; i--) {
+        if (!/[+\-*/]/.test(parts[i]) && parts[i] !== '') {
+          const n = parseFloat(parts[i]);
+          if (!isNaN(n)) parts[i] = String(n / 100);
+          break;
+        }
+      }
+      display.value = parts.join('');
+    } catch {}
   }
 
   function calculate() {
+    const display = getDisplay();
+    const expr = display.value;
+    if (!expr) return;
     try {
-      document.getElementById('display').value = eval(document.getElementById('display').value);
+      if (/[+\-*/]$/.test(expr)) throw new Error('dangling operator');
+      const result = Function('return ' + expr)();
+      if (typeof result === 'number' && isFinite(result)) {
+        document.getElementById('history').textContent = expr + ' =';
+        display.value = String(result);
+      } else {
+        throw new Error('Invalid result');
+      }
     } catch {
       alert('Invalid expression');
     }
@@ -100,7 +184,38 @@
   function toggleDarkMode() {
     document.body.classList.toggle('dark-mode');
     document.body.classList.toggle('light-mode');
+    const isDark = document.body.classList.contains('dark-mode');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    
+    const btn = document.querySelector('button[onclick="toggleDarkMode()"]');
+    if (btn) {
+      btn.innerHTML = isDark 
+        ? '<i class="fas fa-sun"></i> Light Mode' 
+        : '<i class="fas fa-moon"></i> Dark Mode';
+    }
   }
+  
+  // Load saved theme
+  window.addEventListener('DOMContentLoaded', function() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    if (savedTheme === 'dark') {
+      document.body.classList.add('dark-mode');
+      document.body.classList.remove('light-mode');
+      const btn = document.querySelector('button[onclick="toggleDarkMode()"]');
+      if (btn) btn.innerHTML = '<i class="fas fa-sun"></i> Light Mode';
+    }
+    // Keyboard support
+    document.addEventListener('keydown', (e) => {
+      const k = e.key;
+      if (/^[0-9]$/.test(k)) appendValue(k);
+      else if (k === '.') appendDot();
+      else if (k === '+' || k === '-' || k === '*' || k === '/') appendOperator(k);
+      else if (k === 'Enter' || k === '=') { e.preventDefault(); calculate(); }
+      else if (k === 'Backspace') { e.preventDefault(); deleteLast(); }
+      else if (k === 'Escape' || k === 'Delete') { e.preventDefault(); clearAll(); }
+      else if (k === '%') percent();
+    });
+  });
 </script>
 
 </body>
