@@ -1,373 +1,252 @@
-import express from 'express';
-import cors from 'cors';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import fs from 'node:fs';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-const { sign: jwtSign, verify: jwtVerify } = jwt;
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
 
 const app = express();
+const PORT = process.env.PORT || 4000;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Simple request logger
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-  next();
-});
+// Serve static files from the public directory
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve static frontend
-const FRONTEND_DIR = path.resolve(__dirname, '../fornted');
-app.use(express.static(FRONTEND_DIR));
+// In-memory storage (replace with database in production)
+const users = new Map();
+const contactMessages = [];
 
-// Health check API
+// Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'ok', message: 'Server is running' });
 });
 
-// Users store with file persistence (simple demo)
-const DATA_DIR = path.resolve(__dirname, './data');
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
-const USERDATA_FILE = path.join(DATA_DIR, 'userdata.json');
-
-function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
-function loadUsersFromFile() {
+// Contact form endpoint
+app.post('/api/contact', (req, res) => {
   try {
-    ensureDataDir();
-    if (!fs.existsSync(USERS_FILE)) {
-      fs.writeFileSync(USERS_FILE, JSON.stringify({ users: [] }, null, 2));
-      return new Map();
-    }
-    const raw = fs.readFileSync(USERS_FILE, 'utf-8');
-    const parsed = JSON.parse(raw);
-    const map = new Map();
-    for (const u of parsed.users || []) {
-      map.set(String(u.email).toLowerCase(), u);
-    }
-    return map;
-  } catch (e) {
-    console.error('Failed to load users.json:', e);
-    return new Map();
-  }
-}
+    const { name, email, message } = req.body;
 
-function saveUsersToFile(usersMap) {
-  try {
-    ensureDataDir();
-    const usersArr = Array.from(usersMap.values());
-    fs.writeFileSync(USERS_FILE, JSON.stringify({ users: usersArr }, null, 2));
-  } catch (e) {
-    console.error('Failed to save users.json:', e);
-  }
-}
-
-function loadUserData() {
-  try {
-    ensureDataDir();
-    if (!fs.existsSync(USERDATA_FILE)) {
-      fs.writeFileSync(USERDATA_FILE, JSON.stringify({ data: {} }, null, 2));
-      return {};
-    }
-    const raw = fs.readFileSync(USERDATA_FILE, 'utf-8');
-    const parsed = JSON.parse(raw);
-    return parsed.data || {};
-  } catch (e) {
-    console.error('Failed to load userdata.json:', e);
-    return {};
-  }
-}
-
-function saveUserData(dataObj) {
-  try {
-    ensureDataDir();
-    fs.writeFileSync(USERDATA_FILE, JSON.stringify({ data: dataObj }, null, 2));
-  } catch (e) {
-    console.error('Failed to save userdata.json:', e);
-  }
-}
-
-const users = loadUsersFromFile(); // key: email, value: { name, email, password }
-let userData = loadUserData(); // key: email, value: { notes, attendance, calculator }
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
-
-// Register
-app.post('/api/register', (req, res) => {
-  const { name, email, password } = req.body || {};
-  console.log('POST /api/register body:', req.body);
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: 'name, email, password required' });
-  }
-  const normalizedEmail = String(email).toLowerCase();
-  if (users.has(normalizedEmail)) {
-    return res.status(409).json({ error: 'Email already registered' });
-  }
-  const passwordHash = bcrypt.hashSync(password, 10);
-  users.set(normalizedEmail, { name, email: normalizedEmail, passwordHash });
-  saveUsersToFile(users);
-  res.status(201).json({ message: 'Registered', user: { name, email: normalizedEmail } });
-});
-
-// Login
-app.post('/api/login', (req, res) => {
-  const { email, password } = req.body || {};
-  console.log('POST /api/login body:', req.body);
-  if (!email || !password) {
-    return res.status(400).json({ error: 'email, password required' });
-  }
-  const normalizedEmail = String(email).toLowerCase();
-  const user = users.get(normalizedEmail);
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid credentials' });
-  }
-
-  // Support legacy users stored with plaintext password, and migrate to hash
-  let isValid = false;
-  if (user.passwordHash) {
-    try {
-      isValid = bcrypt.compareSync(password, user.passwordHash);
-    } catch (_) {
-      isValid = false;
-    }
-  } else if (user.password) {
-    // Legacy fallback: compare plaintext once, then upgrade to hash
-    if (user.password === password) {
-      isValid = true;
-      const newHash = bcrypt.hashSync(password, 10);
-      users.set(normalizedEmail, { name: user.name, email: user.email, passwordHash: newHash });
-      saveUsersToFile(users);
-    }
-  }
-
-  if (!isValid) {
-    return res.status(401).json({ error: 'Invalid credentials' });
-  }
-  const token = jwtSign({ email: user.email, name: user.name }, JWT_SECRET, { expiresIn: '2h' });
-  res.json({ message: 'Logged in', token, user: { name: user.name, email: user.email } });
-});
-
-// Current user (mock)
-function authMiddleware(req, res, next) {
-  const auth = req.headers.authorization || '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'Missing token' });
-  try {
-    const payload = jwtVerify(token, JWT_SECRET);
-    req.user = payload;
-    next();
-  } catch (e) {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-}
-
-app.get('/api/me', authMiddleware, (req, res) => {
-  res.json({ user: { name: req.user.name, email: req.user.email } });
-});
-
-app.post('/api/logout', (req, res) => {
-  // For stateless JWT, client just discards token
-  res.json({ message: 'Logged out' });
-});
-
-// AI assistant: uses Google Gemini if GOOGLE_API_KEY is set, otherwise simple fallback
-app.post('/api/assistant', async (req, res) => {
-  const body = req.body || {};
-  const userMessage = body.message ? String(body.message) : '';
-  const action = body.action ? String(body.action) : '';
-  const topic = body.topic ? String(body.topic) : '';
-  const text = body.text ? String(body.text) : '';
-  const history = Array.isArray(body.history) ? body.history : [];
-
-  async function llmReply(prompt) {
-    // Prefer OpenAI if OPENAI_API_KEY is provided
-    const openaiKey = process.env.OPENAI_API_KEY;
-    if (openaiKey) {
-      try {
-        const historyMessages = history
-          .slice(-10)
-          .map(h => ({ role: h.role === 'bot' ? 'assistant' : 'user', content: String(h.content || '') }));
-        const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${openaiKey}`
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            temperature: 0.4,
-            messages: [
-              { role: 'system', content: 'You are a helpful assistant for a student study tracker website. Keep replies concise and practical.' },
-              ...historyMessages,
-              { role: 'user', content: prompt }
-            ]
-          })
-        });
-        if (!resp.ok) {
-          const t = await resp.text().catch(() => '');
-          console.warn('OpenAI HTTP error:', resp.status, t);
-          return { text: null, provider: 'openai', error: `HTTP ${resp.status}` };
-        } else {
-          const data = await resp.json();
-          const msg = data?.choices?.[0]?.message?.content || null;
-          if (msg) return { text: msg, provider: 'openai' };
-        }
-      } catch (e) {
-        console.warn('OpenAI fetch failed:', e);
-        return { text: null, provider: 'openai', error: 'network' };
-      }
-    }
-
-    // Fallback to Google Gemini if available
-    const geminiKey = process.env.GOOGLE_API_KEY;
-    if (geminiKey) {
-      try {
-        const contents = [];
-        history.slice(-10).forEach(h => {
-          contents.push({ role: h.role === 'bot' ? 'model' : 'user', parts: [{ text: String(h.content || '') }] });
-        });
-        contents.push({ role: 'user', parts: [{ text: prompt }] });
-        const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}` , {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents })
-        });
-        if (!resp.ok) {
-          const t = await resp.text().catch(() => '');
-          console.warn('Gemini HTTP error:', resp.status, t);
-          return { text: null, provider: 'gemini', error: `HTTP ${resp.status}` };
-        } else {
-          const data = await resp.json();
-          const out = data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
-          if (out) return { text: out, provider: 'gemini' };
-        }
-      } catch (err) {
-        console.warn('Gemini fetch failed:', err);
-        return { text: null, provider: 'gemini', error: 'network' };
-      }
-    }
-    return { text: null, provider: 'fallback' };
-  }
-
-  function fallbackReply(text) {
-    const t = String(text || '').toLowerCase();
-    if (!t) return 'Please type your question.';
-    if (t.includes('task')) return 'Go to Tasks, type your task, then click Add.';
-    if (t.includes('note')) return 'Open Notes to write and save your notes.';
-    if (t.includes('login') || t.includes('register') || t.includes('signup')) return 'Register first, then Login to access your dashboard.';
-    if (t.includes('contact')) return 'Use the Contact page form to send a message.';
-    if (t.includes('dark') || t.includes('theme')) return 'Use the Dark button on the header to toggle dark mode.';
-    if (t.includes('help')) return 'Ask about tasks, notes, login, contact, or general usage.';
-    return "I'm here to help. Ask about tasks, notes, login, or contact.";
-  }
-
-  try {
-    // Handle structured actions first
-    if (action === 'summary') {
-      const prompt = `Summarize the following text in 5-7 concise bullet points:\n\n${text || userMessage}`;
-      const out = await llmReply(prompt);
-      return res.json({ reply: out.text || fallbackReply(text || userMessage), provider: out.provider, error: out.error });
-    }
-    if (action === 'notes') {
-      const prompt = `Create clear, well-structured study notes with headings and bullet points on: "${topic || userMessage}". Keep it concise.`;
-      const out = await llmReply(prompt);
-      return res.json({ reply: out.text || fallbackReply(topic || userMessage), provider: out.provider, error: out.error });
-    }
-    if (action === 'ideas') {
-      const prompt = `Brainstorm 5-7 practical project/study ideas related to: "${topic || userMessage}". Use short bullets with one-line descriptions.`;
-      const out = await llmReply(prompt);
-      return res.json({ reply: out.text || fallbackReply(topic || userMessage), provider: out.provider, error: out.error });
-    }
-    if (action === 'youtube') {
-      // Build simple YouTube search links without API key
-      const q = encodeURIComponent(topic || userMessage || 'study tips');
-      const base = 'https://www.youtube.com/results?search_query=';
-      const links = [
-        { title: 'Top search', url: `${base}${q}` },
-        { title: 'Explained in 10 minutes', url: `${base}${q}+explained+in+10+minutes` },
-        { title: 'Lecture', url: `${base}${q}+lecture` },
-        { title: 'Crash course', url: `${base}${q}+crash+course` },
-        { title: 'Beginner guide', url: `${base}${q}+for+beginners` }
-      ];
-      // Try LLM to propose extra queries (optional)
-      const out = await llmReply(`Suggest 3 concise YouTube search queries for the topic: ${topic || userMessage}. Return as a simple list.`);
-      return res.json({
-        reply: 'Here are some helpful YouTube searches:',
-        links,
-        extraQueries: out.text || '',
-        provider: out.provider,
-        error: out.error
+    // Validation
+    if (!name || !email || !message) {
+      return res.status(400).json({ 
+        error: 'All fields are required',
+        details: 'Please provide name, email, and message'
       });
     }
 
-    // Default free-form chat
-    const defaultPrompt = `You are a helpful assistant for a student study tracker website. Keep replies concise and practical.\n\nUser: ${userMessage}`;
-    const out = await llmReply(defaultPrompt);
-    if (out.text) return res.json({ reply: out.text, provider: out.provider });
-    return res.json({ reply: fallbackReply(userMessage), provider: out.provider, error: out.error });
-  } catch (e) {
-    console.error('assistant error:', e);
-    return res.status(500).json({ reply: 'Sorry, something went wrong.' });
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ 
+        error: 'Invalid email format',
+        details: 'Please provide a valid email address'
+      });
+    }
+
+    // Word count validation (minimum 20 words)
+    const wordCount = message.trim().split(/\s+/).filter(word => word.length > 0).length;
+    if (wordCount < 20) {
+      return res.status(400).json({ 
+        error: 'Message too short',
+        details: `Message must contain at least 20 words. Current: ${wordCount} words`
+      });
+    }
+
+    // Store contact message
+    const contactEntry = {
+      id: Date.now(),
+      name,
+      email,
+      message,
+      timestamp: new Date().toISOString(),
+      wordCount
+    };
+
+    contactMessages.push(contactEntry);
+
+    // Log to console (in production, send email or save to database)
+    console.log('New contact message received:', contactEntry);
+
+    res.status(200).json({ 
+      success: true,
+      message: 'Thank you for your message. We will get back to you soon!',
+      data: {
+        messageId: contactEntry.id,
+        wordCount: contactEntry.wordCount
+      }
+    });
+
+  } catch (error) {
+    console.error('Contact form error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      details: 'Something went wrong while processing your message'
+    });
   }
 });
 
-// Protected user data endpoints
-app.get('/api/data', authMiddleware, (req, res) => {
-  const email = req.user.email;
-  const data = userData[email] || { notes: '', attendance: null, calculator: null };
-  res.json({ data });
-});
-
-app.post('/api/data', authMiddleware, (req, res) => {
-  const email = req.user.email;
-  const incoming = req.body || {};
-  const current = userData[email] || {};
-  const merged = { ...current, ...incoming };
-  userData[email] = merged;
-  saveUserData(userData);
-  res.json({ message: 'Saved', data: merged });
-});
-
-// Debug: list all users (do not use in production)
-app.get('/api/_debug/users', (req, res) => {
+// AI Assistant endpoint
+app.post('/api/assistant', async (req, res) => {
   try {
-    const list = Array.from(users.values()).map(u => ({ name: u.name, email: u.email }));
-    res.json({ count: list.length, users: list });
-  } catch (e) {
-    res.status(500).json({ error: 'debug failed' });
+    const { message, action, topic, text, history = [], userRole = 'student', relevantNotes } = req.body;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ 
+        error: 'Message is required',
+        details: 'Please provide a message to the assistant'
+      });
+    }
+
+    // Use fallback responses
+    const aiResponse = generateAssistantResponse(message.toLowerCase(), userRole, action, topic, text);
+
+    res.json({
+      success: true,
+      reply: aiResponse.text,
+      links: aiResponse.links || [],
+      provider: 'fallback'
+    });
+
+  } catch (error) {
+    console.error('Assistant API error:', error);
+    res.status(500).json({ 
+      error: 'Failed to process request',
+      details: 'The AI assistant encountered an error',
+      reply: 'Sorry, I encountered an error. Please try again.'
+    });
   }
 });
 
-// Ensure API 404s return JSON, not HTML
-app.use('/api', (req, res, next) => {
-  res.status(404).json({ error: 'Not found' });
-});
+function generateYouTubeLinks(query) {
+  const searchQuery = encodeURIComponent(query || 'study tips');
+  return [
+    { title: `${query} - Complete Tutorial`, url: `https://www.youtube.com/results?search_query=${searchQuery}+tutorial` },
+    { title: `${query} - Explained Simply`, url: `https://www.youtube.com/results?search_query=${searchQuery}+explained` },
+    { title: `${query} - For Beginners`, url: `https://www.youtube.com/results?search_query=${searchQuery}+for+beginners` },
+    { title: `${query} - Step by Step`, url: `https://www.youtube.com/results?search_query=${searchQuery}+step+by+step` }
+  ];
+}
 
-// Centralized error handler for APIs
-app.use((err, req, res, next) => {
-  console.error('API error:', err);
-  if (req.path.startsWith('/api')) {
-    res.status(500).json({ error: 'Server error' });
-  } else {
-    next(err);
+function generateAssistantResponse(message, userRole, action, topic, text) {
+  const responses = {
+    study: {
+      keywords: ['study', 'learn', 'topic', 'subject', 'chapter', 'notes', 'revision'],
+      response: 'I can help you with your studies! 📚\n\nHere are some effective strategies:\n\n• Break down complex topics into smaller chunks\n• Use the Pomodoro technique: 25 minutes focused study + 5 minute breaks\n• Practice active recall instead of passive reading\n• Create mind maps to connect concepts\n• Teach the material to someone else\n\nWould you like specific study strategies for any subject?',
+      links: [{ title: 'Effective Study Techniques', url: 'https://www.youtube.com/results?search_query=effective+study+techniques' }]
+    },
+    ideas: {
+      keywords: ['idea', 'project', 'brainstorm', 'creative', 'innovative'],
+      response: 'Great! Here are some project ideas: 💡\n\n**Web Development:**\n• Personal portfolio website\n• Task management app\n• Blog with CMS\n\n**Data Science:**\n• Analyze a dataset you\'re interested in\n• Build a prediction model\n• Create data visualizations\n\nWhich area interests you most?',
+      links: [{ title: 'Project Ideas for Students', url: 'https://www.youtube.com/results?search_query=student+project+ideas' }]
+    },
+    default: {
+      response: 'I\'m here to help with your studies! 🎓\n\n**I can assist with:**\n• Study notes and summaries\n• Project ideas and brainstorming\n• Task organization and planning\n• YouTube video recommendations\n• Study tips and motivation\n\nWhat would you like help with today?',
+      links: []
+    }
+  };
+
+  if (action === 'youtube' && topic) {
+    return {
+      text: `Here are some YouTube video suggestions for "${topic}":\n\n1. Complete tutorial and overview\n2. Step-by-step beginner guide\n3. Advanced concepts explained\n4. Practical examples and projects\n\nClick the links below to search for these videos!`,
+      links: generateYouTubeLinks(topic)
+    };
   }
+
+  for (const [category, data] of Object.entries(responses)) {
+    if (category !== 'default' && data.keywords && data.keywords.some(keyword => message.includes(keyword))) {
+      return { text: data.response, links: data.links };
+    }
+  }
+
+  return { text: responses.default.response, links: responses.default.links };
+}
+
+// Serve individual HTML files
+app.get('/index.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Root -> serve index.html from frontend
+app.get('/login.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+app.get('/register.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'register.html'));
+});
+
+app.get('/register', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'register.html'));
+});
+
+app.get('/dashboard.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+
+app.get('/tasks.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'tasks.html'));
+});
+
+app.get('/notes.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'notes.html'));
+});
+
+app.get('/students.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'students.html'));
+});
+
+app.get('/reports.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'reports.html'));
+});
+
+app.get('/attendance.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'attendance.html'));
+});
+
+app.get('/profile.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'profile.html'));
+});
+
+app.get('/assistant.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'assistant.html'));
+});
+
+app.get('/calculator.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'calculator.html'));
+});
+
+app.get('/contact.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'contact.html'));
+});
+
+// Root route
 app.get('/', (req, res) => {
-  res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-const PORT = process.env.PORT || 4000;
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(500).json({ 
+    error: 'Internal server error',
+    message: err.message 
+  });
+});
+
+// Start server
 app.listen(PORT, () => {
-  console.log(`Server at http://localhost:${PORT}`);
+  console.log(`✨ Study Tracker Server running on port ${PORT}`);
+  console.log(`🌐 Access at: http://localhost:${PORT}`);
+  console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+});
+
+// Handle graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('\nSIGINT received, shutting down gracefully...');
+  process.exit(0);
 });
