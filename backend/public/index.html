@@ -327,6 +327,39 @@
   </button>
 
   <script>
+    // API Configuration (optional for landing page, but kept for consistency)
+    const API_BASE = (window.location.origin) ? window.location.origin : 'http://localhost:4001';
+
+    function getAuthToken() {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        return null;
+      }
+      return token;
+    }
+
+    async function fetchAPI(endpoint, options = {}) {
+      const token = getAuthToken();
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          ...options.headers
+        }
+      });
+
+      if (response.status === 401) {
+        localStorage.clear();
+        window.location.href = 'login.html';
+        throw new Error('Session expired');
+      }
+
+      return response;
+    }
+
     function toggleDarkMode() {
       document.documentElement.classList.toggle('dark');
       localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
@@ -365,6 +398,26 @@
           target.scrollIntoView({ behavior: 'smooth' });
         }
       });
+    });
+
+    // Close mobile menu when clicking outside
+    document.addEventListener('click', function(event) {
+      const mobileMenu = document.querySelector('.mobile-menu');
+      const mobileMenuBtn = document.querySelector('button[onclick="toggleMobileMenu()"]');
+      
+      if (mobileMenu && mobileMenu.classList.contains('active') && 
+          !mobileMenu.contains(event.target) && 
+          !mobileMenuBtn.contains(event.target)) {
+        mobileMenu.classList.remove('active');
+      }
+    });
+
+    // Close mobile menu on window resize (if it becomes desktop view)
+    window.addEventListener('resize', function() {
+      const mobileMenu = document.querySelector('.mobile-menu');
+      if (window.innerWidth >= 768 && mobileMenu) {
+        mobileMenu.classList.remove('active');
+      }
     });
   </script>
 </body>

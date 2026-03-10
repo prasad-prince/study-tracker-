@@ -471,11 +471,11 @@
         <!-- Email Field -->
         <div class="form-group">
           <label for="email" class="form-label required">Email address</label>
-          <input 
-            type="email" 
-            id="email" 
-            class="form-control" 
-            placeholder="you@example.com" 
+          <input
+            type="email"
+            id="email"
+            class="form-control"
+            placeholder="you@example.com"
             required
             autocomplete="email"
           >
@@ -489,16 +489,16 @@
         <div class="form-group">
           <label for="password" class="form-label required">Password</label>
           <div class="password-wrapper">
-            <input 
-              type="password" 
-              id="password" 
-              class="form-control" 
-              placeholder="Enter your password" 
+            <input
+              type="password"
+              id="password"
+              class="form-control"
+              placeholder="Enter your password"
               required
               autocomplete="current-password"
             >
-            <button 
-              type="button" 
+            <button
+              type="button"
               class="password-toggle"
               id="passwordToggle"
               aria-label="Show password"
@@ -510,7 +510,7 @@
               <span class="toggle-text-hide">Hide password</span>
             </button>
           </div>
-          
+
           <div class="error-message" id="passwordError">
             <i class="fas fa-exclamation-circle"></i>
             <span id="passwordErrorText"></span>
@@ -530,7 +530,6 @@
         </div>
 
         <!-- Create Account Link -->
-        <!-- From: -->
         <a href="register.html" class="create-account">Don't have an account? Create one</a>
       </form>
     </div>
@@ -542,7 +541,7 @@
       // Check for saved theme preference or respect OS preference
       const savedTheme = localStorage.getItem('studytracker-theme');
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      
+
       if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
         document.documentElement.setAttribute('data-theme', 'dark');
       } else {
@@ -553,10 +552,10 @@
     function toggleTheme() {
       const currentTheme = document.documentElement.getAttribute('data-theme');
       const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-      
+
       document.documentElement.setAttribute('data-theme', newTheme);
       localStorage.setItem('studytracker-theme', newTheme);
-      
+
       // Add animation class for smooth transition
       document.body.classList.add('theme-transition');
       setTimeout(() => {
@@ -565,93 +564,60 @@
     }
 
     // ===== User Management Functions =====
-    function getUsers() {
+    // Use backend API - prefer current origin so front-end matches backend port
+    const API_BASE = (window && window.location && window.location.origin) ? window.location.origin : 'http://localhost:4001';
+
+    async function loginUser(email, password) {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || data.details || `Login failed (${res.status})`);
+      }
+
+      const data = await res.json();
+      // store token/user in localStorage for client session
+      if (data.token && data.user) {
+        localStorage.setItem('authToken', data.token);
+        localStorage.setItem('currentUserEmail', data.user.email);
+        localStorage.setItem('currentUserName', data.user.name);
+        localStorage.setItem('currentUserRole', data.user.role);
+      }
+      return data.user;
+    }
+
+    async function trackAttendance(email) {
+      // Try to persist attendance to backend; fallback to localStorage if unreachable
       try {
-        return JSON.parse(localStorage.getItem('studytracker_users')) || {};
+        await fetch(`${API_BASE}/api/attendance`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + (localStorage.getItem('authToken') || '')
+          },
+          body: JSON.stringify({ email, date: new Date().toISOString() })
+        });
       } catch (e) {
-        return {};
-      }
-    }
-
-    function saveUsers(users) {
-      localStorage.setItem('studytracker_users', JSON.stringify(users));
-    }
-
-    // Initialize demo users if none exist
-    function initDemoUsers() {
-      const users = getUsers();
-      if (Object.keys(users).length === 0) {
-        const demoUsers = {
-          'student@example.com': {
-            name: 'John Student',
-            email: 'student@example.com',
-            password: 'student123',
-            role: 'student',
-            createdAt: new Date().toISOString()
-          },
-          'teacher@example.com': {
-            name: 'Jane Teacher',
-            email: 'teacher@example.com',
-            password: 'teacher123',
-            role: 'teacher',
-            createdAt: new Date().toISOString()
-          },
-          'admin@example.com': {
-            name: 'Admin User',
-            email: 'admin@example.com',
-            password: 'admin123',
-            role: 'admin',
-            createdAt: new Date().toISOString()
-          }
-        };
-        saveUsers(demoUsers);
-      }
-    }
-
-    function authenticateUser(email, password) {
-      const users = getUsers();
-      const user = users[email];
-      
-      if (!user) {
-        return { success: false, message: 'User not found' };
-      }
-      
-      if (user.password !== password) {
-        return { success: false, message: 'Incorrect password' };
-      }
-      
-      // Generate auth token
-      const token = 'tok_' + Math.random().toString(36).slice(2) + '_' + Date.now();
-      
-      // Save session data
-      localStorage.setItem('authToken', token);
-      localStorage.setItem('currentUserEmail', email);
-      localStorage.setItem('currentUserName', user.name);
-      localStorage.setItem('currentUserRole', user.role);
-      
-      // Track attendance
-      trackAttendance(email);
-      
-      return { success: true, user: user };
-    }
-
-    function trackAttendance(email) {
-      const loginTime = new Date().toISOString();
-      const today = new Date().toISOString().split('T')[0];
-      const userKey = `${email}_${today}`;
-      
-      let attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
-      
-      if (!attendance[userKey]) {
-        attendance[userKey] = {
-          email: email,
-          date: today,
-          loginTime: loginTime,
-          logoutTime: null,
-          duration: 0,
-          status: 'Present'
-        };
-        localStorage.setItem('attendance', JSON.stringify(attendance));
+        // fallback local attendance record
+        const loginTime = new Date().toISOString();
+        const today = loginTime.split('T')[0];
+        const userKey = `${email}_${today}`;
+        let attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
+        if (!attendance[userKey]) {
+          attendance[userKey] = {
+            email: email,
+            date: today,
+            loginTime: loginTime,
+            logoutTime: null,
+            duration: 0,
+            status: 'Present'
+          };
+          localStorage.setItem('attendance', JSON.stringify(attendance));
+        }
       }
     }
 
@@ -670,7 +636,7 @@
       const errorElement = document.getElementById(`${field}Error`);
       const errorText = document.getElementById(`${field}ErrorText`);
       const input = document.getElementById(field);
-      
+
       errorText.textContent = message;
       errorElement.classList.add('show');
       input.classList.add('error');
@@ -679,7 +645,7 @@
     function showSuccess(field) {
       const errorElement = document.getElementById(`${field}Error`);
       const input = document.getElementById(field);
-      
+
       errorElement.classList.remove('show');
       input.classList.remove('error');
     }
@@ -687,7 +653,7 @@
     function togglePasswordVisibility() {
       const isPressed = passwordToggle.getAttribute('aria-pressed') === 'true';
       const newState = !isPressed;
-      
+
       passwordToggle.setAttribute('aria-pressed', newState);
       passwordToggle.setAttribute('aria-label', newState ? 'Hide password' : 'Show password');
       passwordInput.type = newState ? 'text' : 'password';
@@ -695,63 +661,71 @@
 
     async function handleSubmit(event) {
       event.preventDefault();
-      
+
       globalError.classList.remove('show');
-      
+
       const email = emailInput.value.trim();
       const password = passwordInput.value;
-      
+
       // Clear previous errors
       showSuccess('email');
       showSuccess('password');
-      
+
       // Basic validation
       let isValid = true;
-      
+
       if (!email) {
         showError('email', 'Email is required');
         emailInput.focus();
         isValid = false;
+      } else if (!/\S+@\S+\.\S+/.test(email)) {
+        showError('email', 'Please enter a valid email address');
+        emailInput.focus();
+        isValid = false;
       }
-      
+
       if (!password) {
         showError('password', 'Password is required');
         if (isValid) passwordInput.focus();
         isValid = false;
       }
-      
+
       if (!isValid) {
         return;
       }
-      
+
       // Show loading state
       submitBtn.disabled = true;
       submitBtn.classList.add('loading');
-      
+
       try {
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 800));
-        
-        // Authenticate user
-        const result = authenticateUser(email, password);
-        
-        if (result.success) {
-          // Show success message
-          showSuccess('email');
-          showSuccess('password');
-          
-          // Redirect to dashboard
-          window.location.href = 'dashboard.html';
-        } else {
-          throw new Error(result.message);
-        }
-        
+        // Use backend API login
+        const user = await loginUser(email, password);
+        // debug: log stored token/email
+        console.log('🔐 login successful, stored authToken/email:', {
+          token: localStorage.getItem('authToken'),
+          email: localStorage.getItem('currentUserEmail'),
+          name: localStorage.getItem('currentUserName'),
+          role: localStorage.getItem('currentUserRole')
+        });
+        // Track attendance
+        await trackAttendance(email);
+        showSuccess('email');
+        showSuccess('password');
+        window.location.href = 'dashboard.html';
+        return;
+
       } catch (error) {
-        // Show global error
-        const errorMsg = document.getElementById('globalErrorMessage');
-        errorMsg.textContent = error.message;
-        globalError.classList.add('show');
-        
+        // Show appropriate error
+        const errorMsg = error.message || 'Login failed';
+        if (errorMsg.toLowerCase().includes('invalid') || errorMsg.toLowerCase().includes('incorrect')) {
+          showError('email', 'Invalid email or password');
+          showError('password', 'Invalid email or password');
+        } else {
+          document.getElementById('globalErrorMessage').textContent = errorMsg;
+          globalError.classList.add('show');
+        }
+
         submitBtn.disabled = false;
         submitBtn.classList.remove('loading');
       }
@@ -786,16 +760,25 @@
     document.addEventListener('DOMContentLoaded', () => {
       // Initialize theme
       initTheme();
-      
-      // Initialize demo users
-      initDemoUsers();
-      
+
       // Check if already logged in
       const authToken = localStorage.getItem('authToken');
       if (authToken) {
-        // Redirect to dashboard if already logged in
-        window.location.href = 'dashboard.html';
+        // Optional: Redirect to dashboard if already logged in
+        // window.location.href = 'dashboard.html';
       }
+
+      // Set up forgot password link
+      document.getElementById('forgotPasswordLink').addEventListener('click', (e) => {
+        e.preventDefault();
+        alert('Password reset functionality would be implemented here. In a real app, this would send a reset email.');
+      });
+
+      // Set up help link
+      document.getElementById('helpLink').addEventListener('click', (e) => {
+        e.preventDefault();
+        alert('Help documentation and support contact information would appear here.');
+      });
     });
   </script>
 </body>

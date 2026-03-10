@@ -198,14 +198,82 @@
 
       <div>
         <h4><i class="fas fa-list"></i> Saved Notes</h4>
+
+        <!-- Sorting Options -->
+        <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <label style="font-weight: 600; margin: 0;">Sort by:</label>
+          <button class="btn btn-sm btn-outline-primary" id="sortNewest" onclick="sortNotes('newest')" style="font-size: 0.85rem;">
+            <i class="fas fa-arrow-down"></i> Newest First
+          </button>
+          <button class="btn btn-sm btn-outline-primary" id="sortOldest" onclick="sortNotes('oldest')" style="font-size: 0.85rem;">
+            <i class="fas fa-arrow-up"></i> Oldest First
+          </button>
+          <button class="btn btn-sm btn-outline-primary" id="sortAZ" onclick="sortNotes('a-z')" style="font-size: 0.85rem;">
+            <i class="fas fa-arrow-right"></i> A to Z
+          </button>
+          <button class="btn btn-sm btn-outline-primary" id="sortZA" onclick="sortNotes('z-a')" style="font-size: 0.85rem;">
+            <i class="fas fa-arrow-left"></i> Z to A
+          </button>
+        </div>
+
         <div id="notesList"></div>
       </div>
     </div>
   </div>
 
   <script>
+    const API_BASE = (window && window.location && window.location.origin)
+      ? window.location.origin
+      : 'http://localhost:4001';
+
     let uploadedFiles = [];
-    
+    let currentSortType = 'newest'; // Track current sort type
+    let allNotes = []; // Store all notes for sorting
+
+    // Get JWT token from localStorage
+    function getAuthToken() {
+      return localStorage.getItem('authToken');
+    }
+
+    // API Helper: Make authenticated requests
+    async function apiCall(endpoint, method = 'GET', body = null) {
+      const token = getAuthToken();
+
+      if (!token) {
+        console.error('❌ No authentication token found');
+        window.location.href = 'login.html';
+        return null;
+      }
+
+      const options = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      };
+
+      if (body) {
+        options.body = JSON.stringify(body);
+      }
+
+      try {
+        console.log(`📡 ${method} ${API_BASE}${endpoint}`);
+        const response = await fetch(`${API_BASE}${endpoint}`, options);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log(`✅ ${method} ${endpoint} - Success`, data);
+        return data;
+      } catch (error) {
+        console.error(`❌ ${method} ${endpoint} failed:`, error);
+        return null;
+      }
+    }
+
     function toggleMode() {
       document.body.classList.toggle("dark-mode");
       document.body.classList.toggle("light-mode");
@@ -213,8 +281,8 @@
       localStorage.setItem('theme', isDark ? 'dark' : 'light');
       const btn = document.querySelector('button[onclick="toggleMode()"]');
       if (btn) {
-        btn.innerHTML = isDark 
-          ? '<i class="fas fa-sun"></i> Light Mode' 
+        btn.innerHTML = isDark
+          ? '<i class="fas fa-sun"></i> Light Mode'
           : '<i class="fas fa-moon"></i> Dark Mode';
       }
     }
@@ -256,33 +324,86 @@
       });
     }
 
-    function loadNotes() {
-      const notes = JSON.parse(localStorage.getItem('userNotes') || '[]');
+    // Sorting function
+    function sortNotes(sortType) {
+      currentSortType = sortType;
+
+      // Update button states to show which sort is active
+      document.getElementById('sortNewest').classList.remove('active');
+      document.getElementById('sortOldest').classList.remove('active');
+      document.getElementById('sortAZ').classList.remove('active');
+      document.getElementById('sortZA').classList.remove('active');
+
+      if (sortType === 'newest') document.getElementById('sortNewest').classList.add('active');
+      if (sortType === 'oldest') document.getElementById('sortOldest').classList.add('active');
+      if (sortType === 'a-z') document.getElementById('sortAZ').classList.add('active');
+      if (sortType === 'z-a') document.getElementById('sortZA').classList.add('active');
+
+      renderNotes();
+    }
+
+    // Load notes from API
+    async function loadNotes() {
+      console.log('🔍 Fetching notes from database...');
+      const result = await apiCall('/api/notes');
+
+      if (!result) {
+        console.error('❌ Failed to load notes');
+        return;
+      }
+
+      allNotes = result.notes || [];
+      console.log(`✅ Loaded ${allNotes.length} notes from database`);
+      renderNotes();
+    }
+
+    // Render notes with sorting
+    function renderNotes() {
+      let notes = [...allNotes]; // Copy for sorting
+
+      // Sort notes based on current sort type
+      if (currentSortType === 'newest') {
+        notes.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      } else if (currentSortType === 'oldest') {
+        notes.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      } else if (currentSortType === 'a-z') {
+        notes.sort((a, b) => {
+          const textA = (a.text || '').toLowerCase();
+          const textB = (b.text || '').toLowerCase();
+          return textA.localeCompare(textB);
+        });
+      } else if (currentSortType === 'z-a') {
+        notes.sort((a, b) => {
+          const textA = (a.text || '').toLowerCase();
+          const textB = (b.text || '').toLowerCase();
+          return textB.localeCompare(textA);
+        });
+      }
+
       const list = document.getElementById('notesList');
-      
+
       if (notes.length === 0) {
         list.innerHTML = '<p class="text-muted text-center p-4">No notes yet. Create your first note above!</p>';
         return;
       }
 
-      list.innerHTML = notes.map((note, idx) => {
-        const noteObj = typeof note === 'object' ? note : { text: note, files: [], createdAt: new Date().toISOString() };
-        const date = new Date(noteObj.createdAt || Date.now()).toLocaleString();
+      list.innerHTML = notes.map((note) => {
+        const date = new Date(note.createdAt).toLocaleString();
         return `
           <div class="note-item">
-            <div style="white-space: pre-wrap; margin-bottom: 10px;">${noteObj.text || note}</div>
-            ${noteObj.files && noteObj.files.length > 0 ? `
+            <div style="white-space: pre-wrap; margin-bottom: 10px;">${note.text || ''}</div>
+            ${note.files && note.files.length > 0 ? `
               <div class="mb-2">
                 <strong>Attachments:</strong>
-                ${noteObj.files.map(f => `<span class="badge bg-secondary me-2"><i class="fas fa-file"></i> ${f.name}</span>`).join('')}
+                ${note.files.map(f => `<span class="badge bg-secondary me-2"><i class="fas fa-file"></i> ${f.name}</span>`).join('')}
               </div>
             ` : ''}
             <small class="text-muted"><i class="fas fa-clock"></i> ${date}</small>
             <div class="note-actions">
-              <button class="btn btn-sm btn-primary" onclick="downloadNote(${idx})">
+              <button class="btn btn-sm btn-primary" onclick="downloadNote('${note._id}', '${note.text.replace(/'/g, "\\'")}')">
                 <i class="fas fa-download"></i> Download
               </button>
-              <button class="btn btn-sm btn-danger" onclick="deleteNote(${idx})">
+              <button class="btn btn-sm btn-danger" onclick="deleteNote('${note._id}')">
                 <i class="fas fa-trash"></i> Delete
               </button>
             </div>
@@ -291,47 +412,63 @@
       }).join('');
     }
 
-    function saveNote() {
+    // Save note to database
+    async function saveNote() {
       const input = document.getElementById('noteInput');
       const text = input.value.trim();
-      if (!text && uploadedFiles.length === 0) return;
 
-      const notes = JSON.parse(localStorage.getItem('userNotes') || '[]');
-      const fileData = uploadedFiles.map(f => ({ name: f.name, size: f.size, type: f.type }));
-      
-      notes.push({
+      if (!text && uploadedFiles.length === 0) {
+        alert('Please write a note or upload a file');
+        return;
+      }
+
+      const fileData = uploadedFiles.map(f => ({
+        name: f.name,
+        size: f.size,
+        type: f.type
+      }));
+
+      const noteData = {
         text: text,
-        files: fileData,
-        createdAt: new Date().toISOString()
-      });
-      
-      localStorage.setItem('userNotes', JSON.stringify(notes));
-      input.value = '';
-      uploadedFiles = [];
-      document.getElementById('uploadedFiles').innerHTML = '';
-      loadNotes();
+        files: fileData
+      };
+
+      console.log('💾 Saving note to database...', noteData);
+      const result = await apiCall('/api/notes', 'POST', noteData);
+
+      if (result && result.success) {
+        console.log('✅ Note saved successfully');
+        input.value = '';
+        uploadedFiles = [];
+        document.getElementById('uploadedFiles').innerHTML = '';
+        loadNotes();
+      } else {
+        alert('Failed to save note. Please try again.');
+      }
     }
 
-    function downloadNote(index) {
-      const notes = JSON.parse(localStorage.getItem('userNotes') || '[]');
-      const note = notes[index];
-      const noteObj = typeof note === 'object' ? note : { text: note, files: [] };
-      
-      const blob = new Blob([noteObj.text || note], { type: 'text/plain' });
+    // Download note
+    function downloadNote(noteId, noteText) {
+      const blob = new Blob([noteText], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `note_${index + 1}.txt`;
+      a.download = `note_${noteId}.txt`;
       a.click();
       URL.revokeObjectURL(url);
     }
 
-    function deleteNote(index) {
-      if (!confirm('Are you sure you want to delete this note?')) return;
-      const notes = JSON.parse(localStorage.getItem('userNotes') || '[]');
-      notes.splice(index, 1);
-      localStorage.setItem('userNotes', JSON.stringify(notes));
-      loadNotes();
+    // Delete note
+    async function deleteNote(noteId) {
+      console.log('🗑️ Deleting note:', noteId);
+      const result = await apiCall(`/api/notes/${noteId}`, 'DELETE');
+
+      if (result && result.success) {
+        console.log('✅ Note deleted successfully');
+        loadNotes();
+      } else {
+        alert('Failed to delete note. Please try again.');
+      }
     }
 
     window.addEventListener('DOMContentLoaded', function() {
@@ -342,6 +479,15 @@
         const btn = document.querySelector('button[onclick="toggleMode()"]');
         if (btn) btn.innerHTML = '<i class="fas fa-sun"></i> Light Mode';
       }
+
+      // Check authentication and load notes
+      const token = getAuthToken();
+      if (!token) {
+        console.error('❌ Not authenticated - redirecting to login');
+        window.location.href = 'login.html';
+        return;
+      }
+
       loadNotes();
     });
   </script>

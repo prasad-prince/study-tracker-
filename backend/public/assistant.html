@@ -439,6 +439,38 @@
     const history = [];
     let isLoading = false;
 
+    // Authentication functions
+    function getAuthToken() {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        window.location.href = 'login.html';
+        return null;
+      }
+      return token;
+    }
+
+    async function fetchAPI(endpoint, options = {}) {
+      const token = getAuthToken();
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          ...options.headers
+        }
+      });
+
+      if (response.status === 401) {
+        localStorage.clear();
+        window.location.href = 'login.html';
+        throw new Error('Session expired');
+      }
+
+      return response;
+    }
+
     // Theme management
     function loadTheme() {
       const darkMode = localStorage.getItem('darkMode') === 'true';
@@ -546,13 +578,14 @@
     // API communication
     async function callAssistantAPI(payload) {
       try {
-        const response = await fetch(API_BASE + '/api/assistant', {
+        const response = await fetchAPI('/api/assistant', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
           body: JSON.stringify(payload)
         });
+        
+        if (!response) {
+          return { reply: "Please log in to use the AI assistant." };
+        }
         
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -711,6 +744,13 @@
     document.addEventListener('DOMContentLoaded', () => {
       // Load theme
       loadTheme();
+      
+      // Check authentication
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        window.location.href = 'login.html';
+        return;
+      }
       
       // Focus input
       input.focus();

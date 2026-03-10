@@ -163,8 +163,17 @@
       background: #388E3C;
       transform: scale(1.05);
     }
-    .modal-content {
-      animation: fadeIn 0.3s ease;
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+    .error-message {
+      background: #ffebee;
+      color: #c62828;
+      padding: 15px;
+      border-radius: 10px;
+      margin: 15px 0;
     }
   </style>
 </head>
@@ -211,11 +220,14 @@
         </form>
       </div>
 
+      <!-- Error Message -->
+      <div id="errorMessage" class="error-message" style="display: none;"></div>
+
       <!-- Tasks List -->
       <div id="tasksList">
         <h4><i class="fas fa-list"></i> Your Tasks</h4>
-        <div id="tasksContainer">
-          <!-- Tasks will be displayed here -->
+        <div id="tasksContainer" class="loading">
+          <i class="fas fa-spinner fa-spin"></i> Loading tasks...
         </div>
       </div>
     </div>
@@ -254,7 +266,7 @@
                 <option value="Done">Done</option>
               </select>
             </div>
-            <input type="hidden" id="editTaskIndex">
+            <input type="hidden" id="editTaskId">
           </form>
         </div>
         <div class="modal-footer">
@@ -267,6 +279,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+    const API_BASE = (window.location.origin) ? window.location.origin : 'http://localhost:4001';
+    
     function toggleDarkMode() {
       document.body.classList.toggle("dark-mode");
       document.body.classList.toggle("light-mode");
@@ -280,15 +294,46 @@
       }
     }
 
-    function loadTasks() {
-      const token = localStorage.getItem("authToken");
-      if (!token) {
-        location.href = "login.html";
-        return;
-      }
+    function showError(message) {
+      const errorDiv = document.getElementById('errorMessage');
+      errorDiv.textContent = message;
+      errorDiv.style.display = 'block';
+      setTimeout(() => {
+        errorDiv.style.display = 'none';
+      }, 5000);
+    }
 
-      const localTasks = JSON.parse(localStorage.getItem('userTasks') || '[]');
-      displayTasks(localTasks);
+    function getAuthToken() {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        window.location.href = 'login.html';
+        return null;
+      }
+      return token;
+    }
+
+    async function loadTasks() {
+      const token = getAuthToken();
+      if (!token) return;
+
+      try {
+        const response = await fetch(`${API_BASE}/api/tasks`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to load tasks');
+        }
+
+        const data = await response.json();
+        displayTasks(data.tasks || []);
+      } catch (error) {
+        console.error('Load tasks error:', error);
+        showError('Failed to load tasks. Please try again.');
+        document.getElementById('tasksContainer').innerHTML = '<p class="text-danger text-center">Failed to load tasks</p>';
+      }
     }
 
     function displayTasks(tasks) {
@@ -299,32 +344,31 @@
         return;
       }
 
-      container.innerHTML = tasks.map((task, index) => {
-        const taskObj = typeof task === 'object' ? task : { text: task, priority: 'medium', status: 'Pending', deadline: null };
-        const priorityClass = `priority-${taskObj.priority || 'medium'}`;
-        const statusClass = `status-${taskObj.status?.toLowerCase() || 'pending'}`;
-        const deadline = taskObj.deadline ? new Date(taskObj.deadline).toLocaleDateString() : 'No deadline';
-        const isOverdue = taskObj.deadline && new Date(taskObj.deadline) < new Date() && taskObj.status !== 'Done';
+      container.innerHTML = tasks.map((task) => {
+        const priorityClass = `priority-${task.priority || 'medium'}`;
+        const statusClass = `status-${task.status?.toLowerCase() || 'pending'}`;
+        const deadline = task.deadline ? new Date(task.deadline).toLocaleDateString() : 'No deadline';
+        const isOverdue = task.deadline && new Date(task.deadline) < new Date() && task.status !== 'Done';
         
         return `
-          <div class="task-item ${priorityClass} ${taskObj.status === 'Done' ? 'status-done' : ''} ${isOverdue ? 'border-warning' : ''}">
+          <div class="task-item ${priorityClass} ${task.status === 'Done' ? 'status-done' : ''} ${isOverdue ? 'border-warning' : ''}">
             <div class="task-content">
-              <div class="task-title">${taskObj.text || task}</div>
+              <div class="task-title">${task.text}</div>
               <div class="task-meta">
-                <span class="priority-badge ${priorityClass}">${taskObj.priority || 'medium'}</span>
-                <span class="status-badge ${statusClass}">${taskObj.status || 'Pending'}</span>
+                <span class="priority-badge ${priorityClass}">${task.priority || 'medium'}</span>
+                <span class="status-badge ${statusClass}">${task.status || 'Pending'}</span>
                 <span><i class="fas fa-calendar"></i> ${deadline}</span>
                 ${isOverdue ? '<span style="color: #ff4444;"><i class="fas fa-exclamation-triangle"></i> Overdue</span>' : ''}
               </div>
             </div>
             <div class="task-actions">
-              <button class="btn-action btn-toggle" onclick="toggleTaskStatus(${index})" title="Toggle Status">
+              <button class="btn-action btn-toggle" onclick="toggleTaskStatus('${task._id}')" title="Toggle Status">
                 <i class="fas fa-check"></i>
               </button>
-              <button class="btn-action btn-edit" onclick="editTask(${index})" title="Edit">
+              <button class="btn-action btn-edit" onclick="editTask('${task._id}')" title="Edit">
                 <i class="fas fa-edit"></i>
               </button>
-              <button class="btn-action btn-delete" onclick="deleteTask(${index})" title="Delete">
+              <button class="btn-action btn-delete" onclick="deleteTask('${task._id}')" title="Delete">
                 <i class="fas fa-trash"></i>
               </button>
             </div>
@@ -333,77 +377,173 @@
       }).join('');
     }
 
-    function addTask() {
+    async function addTask(e) {
+      e.preventDefault();
+      const token = getAuthToken();
+      if (!token) return;
+
       const taskText = document.getElementById('taskInput').value.trim();
       const priority = document.getElementById('priorityInput').value;
       const deadline = document.getElementById('deadlineInput').value;
       
       if (!taskText) return;
 
-      const localTasks = JSON.parse(localStorage.getItem('userTasks') || '[]');
-      localTasks.push({
-        text: taskText,
-        priority: priority,
-        status: 'Pending',
-        deadline: deadline || null,
-        createdAt: new Date().toISOString()
-      });
-      localStorage.setItem('userTasks', JSON.stringify(localTasks));
-      loadTasks();
-      document.getElementById('addTaskForm').reset();
+      try {
+        const response = await fetch(`${API_BASE}/api/tasks`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            text: taskText,
+            priority: priority,
+            deadline: deadline || null
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to create task');
+        }
+
+        document.getElementById('addTaskForm').reset();
+        await loadTasks();
+      } catch (error) {
+        console.error('Add task error:', error);
+        showError('Failed to add task. Please try again.');
+      }
     }
 
-    function editTask(index) {
-      const localTasks = JSON.parse(localStorage.getItem('userTasks') || '[]');
-      const task = localTasks[index];
-      const taskObj = typeof task === 'object' ? task : { text: task, priority: 'medium', status: 'Pending', deadline: null };
-      
-      document.getElementById('editTaskInput').value = taskObj.text || task;
-      document.getElementById('editPriorityInput').value = taskObj.priority || 'medium';
-      document.getElementById('editDeadlineInput').value = taskObj.deadline || '';
-      document.getElementById('editStatusInput').value = taskObj.status || 'Pending';
-      document.getElementById('editTaskIndex').value = index;
-      
-      const modal = new bootstrap.Modal(document.getElementById('editTaskModal'));
-      modal.show();
+    async function editTask(taskId) {
+      const token = getAuthToken();
+      if (!token) return;
+
+      try {
+        const response = await fetch(`${API_BASE}/api/tasks`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        const data = await response.json();
+        const task = data.tasks.find(t => t._id === taskId);
+        
+        if (!task) return;
+
+        document.getElementById('editTaskInput').value = task.text;
+        document.getElementById('editPriorityInput').value = task.priority || 'medium';
+        document.getElementById('editDeadlineInput').value = task.deadline ? task.deadline.split('T')[0] : '';
+        document.getElementById('editStatusInput').value = task.status || 'Pending';
+        document.getElementById('editTaskId').value = taskId;
+        
+        const modal = new bootstrap.Modal(document.getElementById('editTaskModal'));
+        modal.show();
+      } catch (error) {
+        console.error('Edit task error:', error);
+        showError('Failed to load task details.');
+      }
     }
 
-    function saveEditedTask() {
-      const index = parseInt(document.getElementById('editTaskIndex').value);
-      const localTasks = JSON.parse(localStorage.getItem('userTasks') || '[]');
+    async function saveEditedTask() {
+      const token = getAuthToken();
+      if (!token) return;
+
+      const taskId = document.getElementById('editTaskId').value;
       
-      localTasks[index] = {
-        text: document.getElementById('editTaskInput').value.trim(),
-        priority: document.getElementById('editPriorityInput').value,
-        status: document.getElementById('editStatusInput').value,
-        deadline: document.getElementById('editDeadlineInput').value || null,
-        createdAt: typeof localTasks[index] === 'object' ? localTasks[index].createdAt : new Date().toISOString()
-      };
-      
-      localStorage.setItem('userTasks', JSON.stringify(localTasks));
-      const modal = bootstrap.Modal.getInstance(document.getElementById('editTaskModal'));
-      modal.hide();
-      loadTasks();
+      try {
+        const response = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            text: document.getElementById('editTaskInput').value.trim(),
+            priority: document.getElementById('editPriorityInput').value,
+            status: document.getElementById('editStatusInput').value,
+            deadline: document.getElementById('editDeadlineInput').value || null
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to update task');
+        }
+
+        const modal = bootstrap.Modal.getInstance(document.getElementById('editTaskModal'));
+        modal.hide();
+        await loadTasks();
+      } catch (error) {
+        console.error('Save task error:', error);
+        showError('Failed to update task. Please try again.');
+      }
     }
 
-    function toggleTaskStatus(index) {
-      const localTasks = JSON.parse(localStorage.getItem('userTasks') || '[]');
-      const task = localTasks[index];
-      const taskObj = typeof task === 'object' ? task : { text: task, priority: 'medium', status: 'Pending', deadline: null };
-      
-      taskObj.status = taskObj.status === 'Done' ? 'Pending' : 'Done';
-      localTasks[index] = taskObj;
-      localStorage.setItem('userTasks', JSON.stringify(localTasks));
-      loadTasks();
+    async function toggleTaskStatus(taskId) {
+      const token = getAuthToken();
+      if (!token) return;
+
+      try {
+        const response = await fetch(`${API_BASE}/api/tasks`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        const data = await response.json();
+        const task = data.tasks.find(t => t._id === taskId);
+        
+        if (!task) return;
+
+        const newStatus = task.status === 'Done' ? 'Pending' : 'Done';
+
+        const updateResponse = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            text: task.text,
+            priority: task.priority,
+            status: newStatus,
+            deadline: task.deadline
+          })
+        });
+
+        if (!updateResponse.ok) {
+          throw new Error('Failed to toggle task status');
+        }
+
+        await loadTasks();
+      } catch (error) {
+        console.error('Toggle status error:', error);
+        showError('Failed to update task status.');
+      }
     }
 
-    function deleteTask(index) {
+    async function deleteTask(taskId) {
       if (!confirm('Are you sure you want to delete this task?')) return;
       
-      const localTasks = JSON.parse(localStorage.getItem('userTasks') || '[]');
-      localTasks.splice(index, 1);
-      localStorage.setItem('userTasks', JSON.stringify(localTasks));
-      loadTasks();
+      const token = getAuthToken();
+      if (!token) return;
+
+      try {
+        const response = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to delete task');
+        }
+
+        await loadTasks();
+      } catch (error) {
+        console.error('Delete task error:', error);
+        showError('Failed to delete task. Please try again.');
+      }
     }
 
     window.addEventListener('DOMContentLoaded', function() {
@@ -414,13 +554,11 @@
         const btn = document.querySelector('button[onclick="toggleDarkMode()"]');
         if (btn) btn.innerHTML = '<i class="fas fa-sun"></i> Light Mode';
       }
+      
       loadTasks();
     });
 
-    document.getElementById('addTaskForm').addEventListener('submit', function(e) {
-      e.preventDefault();
-      addTask();
-    });
+    document.getElementById('addTaskForm').addEventListener('submit', addTask);
   </script>
 </body>
 </html>

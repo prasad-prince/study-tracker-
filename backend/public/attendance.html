@@ -186,6 +186,40 @@
   </div>
 
   <script>
+    // API Configuration
+    const API_BASE = (window.location.origin) ? window.location.origin : 'http://localhost:4001';
+
+    function getAuthToken() {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        window.location.href = 'login.html';
+        return null;
+      }
+      return token;
+    }
+
+    async function fetchAPI(endpoint, options = {}) {
+      const token = getAuthToken();
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          ...options.headers
+        }
+      });
+
+      if (response.status === 401) {
+        localStorage.clear();
+        window.location.href = 'login.html';
+        throw new Error('Session expired');
+      }
+
+      return response;
+    }
+
     function toggleDarkMode() {
       document.documentElement.classList.toggle('dark');
       localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
@@ -392,21 +426,21 @@
       doc.save(`attendance_${new Date().toISOString().split('T')[0]}.pdf`);
     }
 
-      // Update time every minute - user-specific
-      setInterval(() => {
-        const userEmail = localStorage.getItem('currentUserEmail');
-        const attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
-        const today = new Date().toISOString().split('T')[0];
-        const userKey = userEmail ? `${userEmail}_${today}` : today;
-        const todayData = attendance[userKey] || attendance[today] || {};
-        
-        if (todayData.loginTime && !todayData.logoutTime) {
-          const login = new Date(todayData.loginTime);
-          const now = new Date();
-          const totalTime = Math.round((now - login) / 1000 / 60);
-          document.getElementById('totalTime').textContent = formatDuration(totalTime);
-        }
-      }, 60000);
+    // Update time every minute - user-specific
+    setInterval(() => {
+      const userEmail = localStorage.getItem('currentUserEmail');
+      const attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
+      const today = new Date().toISOString().split('T')[0];
+      const userKey = userEmail ? `${userEmail}_${today}` : today;
+      const todayData = attendance[userKey] || attendance[today] || {};
+      
+      if (todayData.loginTime && !todayData.logoutTime) {
+        const login = new Date(todayData.loginTime);
+        const now = new Date();
+        const totalTime = Math.round((now - login) / 1000 / 60);
+        document.getElementById('totalTime').textContent = formatDuration(totalTime);
+      }
+    }, 60000);
 
     // Load theme
     if (localStorage.getItem('theme') === 'dark') {
