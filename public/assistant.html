@@ -574,11 +574,14 @@
         const response = await fetchAPI('/api/assistant', {
           method: 'POST',
           body: JSON.stringify(payload)
+        }).catch(err => {
+          console.error('Fetch error:', err);
+          return null; // Handle network error
         });
 
         if (!response) {
           return {
-            reply: "I'm sorry, but I couldn't connect to the server. Please check your internet connection and try again.",
+            reply: "I'm sorry, but I couldn't connect to the server. This might be a network error or the server is down. Please check your connection and try again.",
             provider: 'offline'
           };
         }
