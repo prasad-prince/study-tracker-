@@ -13,7 +13,19 @@
       font-family: 'Poppins', 'Inter', sans-serif;
     }
     .sidebar {
-      transition: all 0.3s ease;
+      transition: transform 0.3s ease;
+      transform: translateX(-100%);
+    }
+    .sidebar.open {
+      transform: translateX(0);
+    }
+    @media (min-width: 768px) {
+      .sidebar {
+        transform: translateX(0);
+      }
+      .main-content {
+        margin-left: 16rem;
+      }
     }
     .sidebar-link {
       transition: all 0.3s ease;
@@ -26,12 +38,60 @@
       background: rgba(102, 126, 234, 0.2);
       border-left: 4px solid #667eea;
     }
+    .table-container {
+      max-height: 400px;
+      overflow-y: auto;
+      border-radius: 0.5rem;
+    }
+    .table-container table {
+      min-width: 100%;
+    }
+    .table-container thead th {
+      position: sticky;
+      top: 0;
+      background: #f3f4f6;
+      z-index: 10;
+    }
+    .dark .table-container thead th {
+      background: #374151;
+    }
+    .table-container tbody tr:hover {
+      background: rgba(102, 126, 234, 0.05);
+    }
+    .dark .table-container tbody tr:hover {
+      background: rgba(102, 126, 234, 0.1);
+    }
+    .loading {
+      opacity: 0.6;
+      pointer-events: none;
+    }
+    .refresh-spinner {
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    @media (max-width: 768px) {
+      .table-container {
+        max-height: 300px;
+      }
+      .sidebar {
+        transform: translateX(-100%);
+      }
+      .sidebar.open {
+        transform: translateX(0);
+      }
+    }
   </style>
 </head>
 <body class="bg-gray-50 dark:bg-gray-900">
   <div class="flex h-screen overflow-hidden">
+    <!-- Mobile Overlay -->
+    <div id="sidebarOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-20 hidden md:hidden" onclick="toggleSidebar()"></div>
+
     <!-- Sidebar -->
-    <aside class="sidebar w-64 bg-white dark:bg-gray-800 shadow-lg fixed h-full">
+    <aside class="sidebar w-64 bg-white dark:bg-gray-800 shadow-lg fixed h-full z-30">
       <div class="p-6">
         <h2 class="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mb-8">
           <i class="fas fa-bullseye"></i> Study Tracker
@@ -75,10 +135,15 @@
     </aside>
 
     <!-- Main Content -->
-    <main class="flex-1 ml-64 overflow-y-auto">
+    <main class="flex-1 ml-0 md:ml-64 overflow-y-auto">
       <header class="bg-white dark:bg-gray-800 shadow-sm p-4 sticky top-0 z-10">
         <div class="flex justify-between items-center">
-          <h1 class="text-2xl font-bold text-gray-800 dark:text-white">Attendance Dashboard</h1>
+          <div class="flex items-center gap-4">
+            <button onclick="toggleSidebar()" class="md:hidden text-gray-600 dark:text-gray-400">
+              <i class="fas fa-bars"></i>
+            </button>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-white">Attendance Dashboard</h1>
+          </div>
           <button onclick="toggleDarkMode()" class="text-gray-600 dark:text-gray-400">
             <i class="fas fa-moon dark:hidden"></i>
             <i class="fas fa-sun hidden dark:inline"></i>
@@ -131,12 +196,15 @@
         </div>
 
         <!-- Export Buttons -->
-        <div class="mb-6 flex gap-4">
+        <div class="mb-6 flex flex-wrap gap-4 items-center">
           <button onclick="exportToCSV()" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition flex items-center gap-2">
             <i class="fas fa-file-csv"></i> Export CSV
           </button>
           <button onclick="exportToPDF()" class="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition flex items-center gap-2">
             <i class="fas fa-file-pdf"></i> Export PDF
+          </button>
+          <button onclick="loadAttendanceData()" class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
+            <i class="fas fa-sync-alt"></i> Refresh Data
           </button>
         </div>
 
@@ -144,20 +212,22 @@
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-6">
           <h2 class="text-xl font-bold mb-4 text-gray-800 dark:text-white">Daily Summary</h2>
           <div class="overflow-x-auto">
-            <table class="w-full text-left">
-              <thead class="bg-gray-100 dark:bg-gray-700">
-                <tr>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Date</th>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Login Time</th>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Logout Time</th>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Duration</th>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Status</th>
-                </tr>
-              </thead>
-              <tbody id="dailyTableBody" class="text-gray-600 dark:text-gray-400">
-                <!-- Table rows will be inserted here -->
-              </tbody>
-            </table>
+            <div class="table-container">
+              <table class="w-full text-left">
+                <thead class="bg-gray-100 dark:bg-gray-700">
+                  <tr>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Date</th>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Login Time</th>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Logout Time</th>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Duration</th>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="dailyTableBody" class="text-gray-600 dark:text-gray-400">
+                  <!-- Table rows will be inserted here -->
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -165,20 +235,22 @@
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
           <h2 class="text-xl font-bold mb-4 text-gray-800 dark:text-white">Monthly Summary</h2>
           <div class="overflow-x-auto">
-            <table class="w-full text-left">
-              <thead class="bg-gray-100 dark:bg-gray-700">
-                <tr>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Month</th>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Days Present</th>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Total Hours</th>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Average/Day</th>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Attendance %</th>
-                </tr>
-              </thead>
-              <tbody id="monthlyTableBody" class="text-gray-600 dark:text-gray-400">
-                <!-- Table rows will be inserted here -->
-              </tbody>
-            </table>
+            <div class="table-container">
+              <table class="w-full text-left">
+                <thead class="bg-gray-100 dark:bg-gray-700">
+                  <tr>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Month</th>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Days Present</th>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Total Hours</th>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Average/Day</th>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Attendance %</th>
+                  </tr>
+                </thead>
+                <tbody id="monthlyTableBody" class="text-gray-600 dark:text-gray-400">
+                  <!-- Table rows will be inserted here -->
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -187,7 +259,7 @@
 
   <script>
     // API Configuration
-    const API_BASE = (window.location.origin) ? window.location.origin : 'http://localhost:4001';
+    const API_BASE = (window.location.origin) ? window.location.origin : 'http://localhost:4003';
 
     function getAuthToken() {
       const token = localStorage.getItem('authToken');
@@ -218,6 +290,20 @@
       }
 
       return response;
+    }
+
+    function toggleSidebar() {
+      const sidebar = document.querySelector('.sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      const isOpen = sidebar.classList.contains('open');
+
+      if (isOpen) {
+        sidebar.classList.remove('open');
+        overlay.classList.add('hidden');
+      } else {
+        sidebar.classList.add('open');
+        overlay.classList.remove('hidden');
+      }
     }
 
     function toggleDarkMode() {
@@ -263,15 +349,21 @@
     }
 
     function loadAttendanceData() {
+      const refreshBtn = document.querySelector('button[onclick="loadAttendanceData()"]');
+      if (refreshBtn) {
+        refreshBtn.classList.add('loading');
+        refreshBtn.innerHTML = '<i class="fas fa-spinner refresh-spinner"></i> Refreshing...';
+      }
+
       const userEmail = localStorage.getItem('currentUserEmail');
       const attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
       const today = new Date().toISOString().split('T')[0];
       const userKey = userEmail ? `${userEmail}_${today}` : today;
-      
+
       // Today's stats - user-specific
       const todayData = attendance[userKey] || attendance[today] || {};
       document.getElementById('todayStatus').textContent = todayData.status || 'Absent';
-      
+
       // Calculate current session time
       let totalTimeToday = todayData.duration || 0;
       if (todayData.loginTime && !todayData.logoutTime) {
@@ -287,7 +379,7 @@
       let daysPresent = 0;
       let totalDays = 0;
       let totalMinutes = 0;
-      
+
       Object.keys(attendance).forEach(key => {
         const record = attendance[key];
         // Check if this record belongs to current user
@@ -300,7 +392,7 @@
           }
         }
       });
-      
+
       const monthlyPercent = totalDays > 0 ? Math.round((daysPresent / totalDays) * 100) : 0;
       document.getElementById('monthlyAttendance').textContent = monthlyPercent + '%';
 
@@ -325,12 +417,12 @@
         const dateB = new Date(attendance[b].date || b.split('_')[1] || b);
         return dateB - dateA;
       }).slice(0, 30);
-      
+
       dailyBody.innerHTML = sortedDates.map(key => {
         const record = attendance[key];
         const date = record.date || key.split('_')[1] || key;
         return `
-          <tr class="border-b dark:border-gray-700">
+          <tr class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
             <td class="p-3">${new Date(date).toLocaleDateString()}</td>
             <td class="p-3">${formatTime(record.loginTime)}</td>
             <td class="p-3">${formatTime(record.logoutTime)}</td>
@@ -342,7 +434,7 @@
             </td>
           </tr>
         `;
-      }).join('') || '<tr><td colspan="5" class="p-3 text-center">No attendance records yet</td></tr>';
+      }).join('') || '<tr><td colspan="5" class="p-3 text-center text-gray-500">No attendance records yet</td></tr>';
 
       // Monthly table - user-specific
       const monthlyBody = document.getElementById('monthlyTableBody');
@@ -367,7 +459,7 @@
         const avgPerDay = month.days > 0 ? Math.round(month.totalMinutes / month.days) : 0;
         const percent = Math.round((month.days / month.daysInMonth) * 100);
         return `
-          <tr class="border-b dark:border-gray-700">
+          <tr class="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
             <td class="p-3">${monthName}</td>
             <td class="p-3">${month.days}</td>
             <td class="p-3">${formatDuration(month.totalMinutes)}</td>
@@ -375,72 +467,173 @@
             <td class="p-3">${percent}%</td>
           </tr>
         `;
-      }).join('') || '<tr><td colspan="5" class="p-3 text-center">No monthly data yet</td></tr>';
+      }).join('') || '<tr><td colspan="5" class="p-3 text-center text-gray-500">No monthly data yet</td></tr>';
+
+      // Remove loading state
+      setTimeout(() => {
+        if (refreshBtn) {
+          refreshBtn.classList.remove('loading');
+          refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Data';
+        }
+      }, 500);
     }
 
     function exportToCSV() {
+      const userEmail = localStorage.getItem('currentUserEmail');
       const attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
-      let csv = 'Date,Login Time,Logout Time,Duration (minutes),Status\n';
-      
-      Object.keys(attendance).sort().reverse().forEach(date => {
-        const record = attendance[date];
-        csv += `"${date}","${formatTime(record.loginTime)}","${formatTime(record.logoutTime)}","${record.duration || 0}","${record.status || 'Absent'}"\n`;
+
+      let csv = 'Date,Login Time,Logout Time,Duration (minutes),Status,Email\n';
+
+      // Filter records for current user
+      const userRecords = Object.keys(attendance).filter(key => {
+        if (!userEmail) return true;
+        const record = attendance[key];
+        return record.email === userEmail || key.startsWith(userEmail + '_');
       });
 
-      const blob = new Blob([csv], { type: 'text/csv' });
+      userRecords.sort().reverse().forEach(key => {
+        const record = attendance[key];
+        const date = record.date || key.split('_')[1] || key;
+        csv += `"${date}","${formatTime(record.loginTime)}","${formatTime(record.logoutTime)}","${record.duration || 0}","${record.status || 'Absent'}","${record.email || userEmail || 'N/A'}"\n`;
+      });
+
+      if (userRecords.length === 0) {
+        csv += '"No attendance records found","","","","",""\n';
+      }
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `attendance_${new Date().toISOString().split('T')[0]}.csv`;
+      a.download = `attendance_${userEmail || 'user'}_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
 
     function exportToPDF() {
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF();
-      
+
+      const userEmail = localStorage.getItem('currentUserEmail');
+      const userName = localStorage.getItem('currentUserName') || 'User';
       const attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
-      
+
+      // Header
       doc.setFontSize(20);
       doc.text('Attendance Report', 20, 20);
       doc.setFontSize(12);
-      doc.text(`Generated on: ${new Date().toLocaleString()}`, 20, 35);
-      
-      let y = 50;
+      doc.text(`User: ${userName} (${userEmail || 'N/A'})`, 20, 30);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, 20, 40);
+
+      // Filter records for current user
+      const userRecords = Object.keys(attendance).filter(key => {
+        if (!userEmail) return true;
+        const record = attendance[key];
+        return record.email === userEmail || key.startsWith(userEmail + '_');
+      });
+
+      let y = 60;
       doc.setFontSize(14);
       doc.text('Daily Summary', 20, y);
       y += 10;
       doc.setFontSize(10);
-      
-      Object.keys(attendance).sort().reverse().slice(0, 30).forEach(date => {
-        const record = attendance[date];
-        if (y > 280) {
-          doc.addPage();
-          y = 20;
-        }
-        doc.text(`${date} | ${formatTime(record.loginTime)} - ${formatTime(record.logoutTime)} | ${formatDuration(record.duration)} | ${record.status || 'Absent'}`, 20, y);
-        y += 8;
-      });
 
-      doc.save(`attendance_${new Date().toISOString().split('T')[0]}.pdf`);
-    }
+      if (userRecords.length === 0) {
+        doc.text('No attendance records found', 20, y);
+      } else {
+        userRecords.sort().reverse().slice(0, 50).forEach(key => {
+          const record = attendance[key];
+          const date = record.date || key.split('_')[1] || key;
 
-    // Update time every minute - user-specific
-    setInterval(() => {
-      const userEmail = localStorage.getItem('currentUserEmail');
-      const attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
+          if (y > 270) {
+            doc.addPage();
+            y = 20;
+          }
+
+          const line = `${new Date(date).toLocaleDateString()} | ${formatTime(record.loginTime)} - ${formatTime(record.logoutTime)} | ${formatDuration(record.duration)} | ${record.status || 'Absent'}`;
+          doc.text(line, 20, y);
+          y += 8;
+        });
+      }
+
+      // Add summary statistics
+      if (y > 250) {
+        doc.addPage();
+        y = 20;
+      }
+
+      y += 10;
+      doc.setFontSize(12);
+      doc.text('Summary Statistics:', 20, y);
+      y += 8;
+      doc.setFontSize(10);
+
       const today = new Date().toISOString().split('T')[0];
       const userKey = userEmail ? `${userEmail}_${today}` : today;
       const todayData = attendance[userKey] || attendance[today] || {};
-      
-      if (todayData.loginTime && !todayData.logoutTime) {
-        const login = new Date(todayData.loginTime);
-        const now = new Date();
-        const totalTime = Math.round((now - login) / 1000 / 60);
-        document.getElementById('totalTime').textContent = formatDuration(totalTime);
+      const totalTime = document.getElementById('totalTime').textContent;
+      const avgTime = document.getElementById('avgWorkTime').textContent;
+      const monthlyAttendance = document.getElementById('monthlyAttendance').textContent;
+
+      doc.text(`Today's Total Time: ${totalTime}`, 20, y);
+      y += 6;
+      doc.text(`Average Work Time: ${avgTime}`, 20, y);
+      y += 6;
+      doc.text(`Monthly Attendance: ${monthlyAttendance}`, 20, y);
+
+      doc.save(`attendance_${userEmail || 'user'}_${new Date().toISOString().split('T')[0]}.pdf`);
+    }
+
+    // Real-time attendance counter - updates every minute
+    let realtimeInterval;
+
+    function startRealtimeCounter() {
+      if (realtimeInterval) clearInterval(realtimeInterval);
+
+      realtimeInterval = setInterval(() => {
+        const userEmail = localStorage.getItem('currentUserEmail');
+        const attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
+        const today = new Date().toISOString().split('T')[0];
+        const userKey = userEmail ? `${userEmail}_${today}` : today;
+        const todayData = attendance[userKey] || attendance[today] || {};
+
+        // Update Total Time Today
+        if (todayData.loginTime && !todayData.logoutTime) {
+          const login = new Date(todayData.loginTime);
+          const now = new Date();
+          const totalTime = Math.round((now - login) / 1000 / 60);
+          document.getElementById('totalTime').textContent = formatDuration(totalTime);
+        }
+
+        // Update Average Work Time (recalculate based on all user records)
+        const userRecords = Object.keys(attendance).filter(key => {
+          if (!userEmail) return true;
+          const record = attendance[key];
+          return (record.email === userEmail || key.startsWith(userEmail + '_')) && record.duration > 0;
+        }).map(key => attendance[key]);
+
+        if (userRecords.length > 0) {
+          const totalMinutes = userRecords.reduce((sum, record) => sum + (record.duration || 0), 0);
+          const avgMinutes = Math.round(totalMinutes / userRecords.length);
+          document.getElementById('avgWorkTime').textContent = formatDuration(avgMinutes);
+        }
+
+        // Update today's status if needed
+        if (todayData.loginTime) {
+          document.getElementById('todayStatus').textContent = 'Present';
+        }
+
+      }, 60000); // Update every minute
+    }
+
+    function stopRealtimeCounter() {
+      if (realtimeInterval) {
+        clearInterval(realtimeInterval);
+        realtimeInterval = null;
       }
-    }, 60000);
+    }
 
     // Load theme
     if (localStorage.getItem('theme') === 'dark') {
@@ -449,6 +642,21 @@
 
     // Initialize
     loadAttendanceData();
+    startRealtimeCounter();
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+      stopRealtimeCounter();
+    });
+
+    // Handle visibility change (pause/resume counter when tab is hidden/visible)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        stopRealtimeCounter();
+      } else {
+        startRealtimeCounter();
+      }
+    });
   </script>
 </body>
 </html>

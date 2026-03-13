@@ -565,7 +565,7 @@
 
     // ===== User Management Functions =====
     // Use backend API - prefer current origin so front-end matches backend port
-    const API_BASE = (window && window.location && window.location.origin) ? window.location.origin : 'http://localhost:4001';
+    const API_BASE = (window && window.location && window.location.origin) ? window.location.origin : 'http://localhost:4003';
 
     async function loginUser(email, password) {
       const res = await fetch(`${API_BASE}/api/auth/login`, {
