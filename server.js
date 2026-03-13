@@ -569,7 +569,7 @@ app.get('/api/debug/users-raw', async (req, res) => {
 // ========== AI ASSISTANT ==========
 app.post('/api/assistant', async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, relevantNotes, userRole } = req.body;
 
     if (!message || !message.trim()) {
       return res.status(400).json({
@@ -577,13 +577,35 @@ app.post('/api/assistant', async (req, res) => {
       });
     }
 
-    // Simple response logic (can be enhanced with actual AI)
-    const reply = `I received your message: "${message}". This is a placeholder response. Integrate with OpenAI or another AI service for real responses.`;
+    const query = message.toLowerCase();
+    let reply = "";
+    let provider = "fallback";
+
+    // Enhanced contextual responses for Study Tracker
+    if (query.includes('💡') || query.includes('ideas')) {
+      reply = "Here are some project ideas based on your query: \n1. Build a Personal Finance Tracker\n2. Create a Weather Dashboard using Fetch API\n3. Develop a Recipe Finder app\n4. Design a Portfolio Website.";
+      provider = "assistant";
+    } else if (query.includes('📝') || query.includes('notes')) {
+      if (relevantNotes) {
+        reply = `I found some notes that might help. Based on your study patterns, you should focus on the key concepts mentioned in your notes. Would you like me to summarize them further?`;
+      } else {
+        reply = "It seems you haven't created any notes on this topic yet. You can go to the Notes page to add some!";
+      }
+      provider = "assistant";
+    } else if (query.includes('📄') || query.includes('summary')) {
+      reply = "To provide a good summary, I need more context. However, generally, summarizing involves identifying the main idea and supporting details while omitting redundant information.";
+      provider = "assistant";
+    } else if (query.includes('🎥') || query.includes('youtube')) {
+      reply = "I recommend checking out channels like 'Traversy Media', 'The Net Ninja', or 'Web Dev Simplified' for high-quality educational content on this topic.";
+      provider = "assistant";
+    } else {
+      reply = `I received your message: "${message}". As your Study Tracker AI, I'm here to help you manage your tasks and notes. How can I assist you today?`;
+    }
 
     res.json({
       success: true,
       reply,
-      provider: 'fallback'
+      provider
     });
   } catch (error) {
     console.error('Assistant error:', error);

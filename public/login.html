@@ -595,15 +595,11 @@
 
     function clearPreviousUserData() {
       // Clear all previous user data
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('currentUserEmail');
-      localStorage.removeItem('currentUserName');
-      localStorage.removeItem('currentUserRole');
-      localStorage.removeItem('attendance');
-      localStorage.removeItem('userNotes');
-      localStorage.removeItem('userTasks');
-      // Keep theme preference
-      // localStorage.removeItem('theme');
+      const theme = localStorage.getItem('studytracker-theme');
+      localStorage.clear();
+      sessionStorage.clear();
+      // Restore theme preference
+      if (theme) localStorage.setItem('studytracker-theme', theme);
     }
 
     async function trackAttendance(email) {

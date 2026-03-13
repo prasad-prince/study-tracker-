@@ -366,14 +366,17 @@
       } catch (error) {
         console.error('Logout error:', error);
       } finally {
+        // Preserve theme settings before clearing
+        const theme = localStorage.getItem('theme');
+        const darkMode = localStorage.getItem('darkMode');
+
         // Clear all user data
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('currentUserEmail');
-        localStorage.removeItem('currentUserName');
-        localStorage.removeItem('currentUserRole');
-        localStorage.removeItem('attendance');
-        localStorage.removeItem('userNotes');
-        localStorage.removeItem('userTasks');
+        localStorage.clear();
+        sessionStorage.clear();
+
+        // Restore theme settings
+        if (theme) localStorage.setItem('theme', theme);
+        if (darkMode) localStorage.setItem('darkMode', darkMode);
 
         window.location.href = 'login.html';
       }

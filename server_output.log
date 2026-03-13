@@ -1,0 +1,9 @@
+
+> study-tracker@1.0.0 start
+> node server.js
+
+✨ Study Tracker Server running on port 4000
+🌐 Access at: http://localhost:4000
+🏥 Health check: http://localhost:4000/api/health
+🔌 Mongoose disconnected from MongoDB
+❌ MongoDB Connection Error: connect ECONNREFUSED ::1:27017, connect ECONNREFUSED 127.0.0.1:27017
