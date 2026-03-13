@@ -280,38 +280,77 @@
   </div>
 
   <script>
+    // ===== API Configuration =====
+    const API_BASE = (window.location.origin) ? window.location.origin : 'http://localhost:4001';
+
+    function getAuthToken() {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        window.location.href = 'login.html';
+        return null;
+      }
+      return token;
+    }
+
+    async function fetchAPI(endpoint, options = {}) {
+      const token = getAuthToken();
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          ...options.headers
+        }
+      });
+
+      if (response.status === 401) {
+        localStorage.clear();
+        window.location.href = 'login.html';
+        throw new Error('Session expired');
+      }
+
+      return response;
+    }
+
     // ===== Authentication Check =====
     function checkAuth() {
       const token = localStorage.getItem('authToken');
       const userEmail = localStorage.getItem('currentUserEmail');
-      
+
+      console.log('🔐 checkAuth -> token present?', !!token, 'email=', userEmail);
+
       if (!token || !userEmail) {
         // Not logged in, redirect to login page
+        console.warn('⚠️ checkAuth failed, redirecting to login');
         window.location.href = 'login.html';
         return false;
       }
-      
-      // Optional: Verify user exists in user database
-      const users = JSON.parse(localStorage.getItem('studytracker_users') || '{}');
-      if (!users[userEmail]) {
-        // User doesn't exist anymore
-        localStorage.clear();
-        window.location.href = 'login.html';
-        return false;
-      }
-      
+      // Authentication successful - user logged in with valid JWT token
       return true;
     }
 
     // ===== Dashboard Functions =====
     function logout() {
       try {
+        // Update logout time in backend if possible
+        fetch('/api/attendance/logout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+          }
+        }).catch(error => {
+          console.log('Failed to update logout time:', error.message);
+        });
+
+        // Update local attendance record as fallback
         const logoutTime = new Date().toISOString();
         const today = logoutTime.split('T')[0];
         const userEmail = localStorage.getItem('currentUserEmail');
 
         if (userEmail) {
-          // Update attendance record
           const attendanceRaw = localStorage.getItem('attendance') || '{}';
           const attendance = JSON.parse(attendanceRaw);
           const userKey = `${userEmail}_${today}`;
@@ -327,11 +366,15 @@
       } catch (error) {
         console.error('Logout error:', error);
       } finally {
-        // Clear session and redirect
+        // Clear all user data
         localStorage.removeItem('authToken');
         localStorage.removeItem('currentUserEmail');
         localStorage.removeItem('currentUserName');
         localStorage.removeItem('currentUserRole');
+        localStorage.removeItem('attendance');
+        localStorage.removeItem('userNotes');
+        localStorage.removeItem('userTasks');
+
         window.location.href = 'login.html';
       }
     }
@@ -357,120 +400,172 @@
     }
 
     function loadStats() {
-      const userRole = localStorage.getItem('currentUserRole') || 'student';
-      const userName = localStorage.getItem('currentUserName') || 'User';
-      const userEmail = localStorage.getItem('currentUserEmail') || '';
-      const isAdmin = userRole === 'admin' || userRole === 'teacher';
+      try {
+        console.log('🔍 loadStats() - Retrieving user data from localStorage...');
+        const userRole = localStorage.getItem('currentUserRole') || 'student';
+        const userName = localStorage.getItem('currentUserName') || 'User';
+        const userEmail = localStorage.getItem('currentUserEmail') || '';
+        const isAdmin = userRole === 'admin' || userRole === 'teacher';
+        console.log('📊 User data:', { userRole, userName, userEmail, isAdmin });
 
-      // Update role badge and username
-      const roleBadge = document.getElementById('roleBadge');
-      const userNameEl = document.getElementById('userName');
-      
-      if (roleBadge) {
-        if (userRole === 'admin') {
-          roleBadge.innerHTML = '<i class="fas fa-user-shield"></i> Administrator';
-          roleBadge.className = 'px-3 py-1 bg-purple-600 text-white rounded-full text-sm font-semibold';
-        } else if (userRole === 'teacher') {
-          roleBadge.innerHTML = '<i class="fas fa-chalkboard-teacher"></i> Teacher';
-          roleBadge.className = 'px-3 py-1 bg-blue-600 text-white rounded-full text-sm font-semibold';
-        } else {
-          roleBadge.innerHTML = '<i class="fas fa-user-graduate"></i> Student';
-          roleBadge.className = 'px-3 py-1 bg-indigo-600 text-white rounded-full text-sm font-semibold';
-        }
-      }
-      
-      if (userNameEl) {
-        userNameEl.textContent = `Welcome, ${userName}!`;
-      }
+        // Update role badge and username
+        try {
+          console.log('🔍 Updating role badge...');
+          const roleBadge = document.getElementById('roleBadge');
+          const userNameEl = document.getElementById('userName');
 
-      // Show/hide views based on role
-      const studentView = document.getElementById('studentView');
-      const teacherView = document.getElementById('teacherView');
-      const studentProgress = document.getElementById('studentProgress');
-      const teacherStats = document.getElementById('teacherStats');
-      const chartTitle = document.getElementById('chartTitle');
-
-      if (isAdmin) {
-        if (studentView) studentView.style.display = 'none';
-        if (teacherView) teacherView.style.display = 'block';
-        if (studentProgress) studentProgress.style.display = 'none';
-        if (teacherStats) teacherStats.style.display = 'block';
-        if (chartTitle) chartTitle.textContent = 'Class Performance Overview';
-      } else {
-        if (studentView) studentView.style.display = 'block';
-        if (teacherView) teacherView.style.display = 'none';
-        if (teacherStats) teacherStats.style.display = 'none';
-        if (studentProgress) studentProgress.style.display = 'grid';
-        if (chartTitle) chartTitle.textContent = 'Task Completion Trend';
-      }
-
-      // Load user-specific data
-      if (!isAdmin) {
-        // Student stats
-        const tasks = JSON.parse(localStorage.getItem('userTasks') || '[]');
-        const notes = JSON.parse(localStorage.getItem('userNotes') || '[]');
-        const attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
-
-        const totalTasks = tasks.length;
-        const completedTasks = tasks.filter(t => t && t.status === 'Done').length || 0;
-        const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-        const notesCount = notes.length;
-        const weeklyProgress = Math.min(Math.round((completedTasks / 10) * 100), 100);
-
-        // Calculate monthly attendance - user-specific
-        const now = new Date();
-        const currentMonth = now.getMonth();
-        const currentYear = now.getFullYear();
-        let daysPresent = 0;
-        let totalDays = 0;
-
-        if (userEmail) {
-          Object.keys(attendance).forEach(key => {
-            const record = attendance[key];
-            if (!record) return;
-            
-            // Check if this record belongs to current user
-            const belongsToUser = (record.email === userEmail) || key.startsWith(userEmail + '_');
-            if (!belongsToUser) return;
-            
-            try {
-              const recordDate = record.date ? new Date(record.date) : new Date((key.split('_')[1] || ''));
-              if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) {
-                totalDays++;
-                if (record.status === 'Present') daysPresent++;
-              }
-            } catch (e) {
-              console.error('Date parsing error:', e);
+          if (!roleBadge) {
+            console.warn('⚠️ roleBadge element not found!');
+          } else {
+            if (userRole === 'admin') {
+              roleBadge.innerHTML = '<i class="fas fa-user-shield"></i> Administrator';
+              roleBadge.className = 'px-3 py-1 bg-purple-600 text-white rounded-full text-sm font-semibold';
+            } else if (userRole === 'teacher') {
+              roleBadge.innerHTML = '<i class="fas fa-chalkboard-teacher"></i> Teacher';
+              roleBadge.className = 'px-3 py-1 bg-blue-600 text-white rounded-full text-sm font-semibold';
+            } else {
+              roleBadge.innerHTML = '<i class="fas fa-user-graduate"></i> Student';
+              roleBadge.className = 'px-3 py-1 bg-indigo-600 text-white rounded-full text-sm font-semibold';
             }
-          });
+            console.log('✅ Role badge updated');
+          }
+
+          if (!userNameEl) {
+            console.warn('⚠️ userName element not found!');
+          } else {
+            userNameEl.textContent = `Welcome, ${userName}!`;
+            console.log('✅ Username updated:', userName);
+          }
+        } catch (badgeError) {
+          console.error('❌ Error updating role badge:', badgeError);
         }
 
-        const monthlyAttendance = totalDays > 0 ? Math.round((daysPresent / totalDays) * 100) : 0;
+        // Show/hide views based on role
+        try {
+          console.log('🔍 Setting up student/teacher views...');
+          const studentView = document.getElementById('studentView');
+          const teacherView = document.getElementById('teacherView');
+          const studentProgress = document.getElementById('studentProgress');
+          const teacherStats = document.getElementById('teacherStats');
+          const chartTitle = document.getElementById('chartTitle');
 
-        // Update UI elements
-        const totalEl = document.getElementById('totalTasks');
-        const compEl = document.getElementById('completedTasks');
-        const notesEl = document.getElementById('notesCount');
-        const attEl = document.getElementById('attendancePercent');
-
-        if (totalEl) totalEl.textContent = totalTasks;
-        if (compEl) compEl.textContent = completedTasks;
-        if (notesEl) notesEl.textContent = notesCount;
-        if (attEl) attEl.textContent = monthlyAttendance + '%';
-
-        // Animate progress bars
-        setTimeout(() => {
-          const tp = document.getElementById('taskProgress');
-          const wp = document.getElementById('weeklyProgress');
-          if (tp) {
-            tp.style.width = completionRate + '%';
-            tp.textContent = completionRate + '%';
+          if (isAdmin) {
+            if (studentView) studentView.style.display = 'none';
+            if (teacherView) teacherView.style.display = 'block';
+            if (studentProgress) studentProgress.style.display = 'none';
+            if (teacherStats) teacherStats.style.display = 'block';
+            if (chartTitle) chartTitle.textContent = 'Class Performance Overview';
+            console.log('✅ Teacher view activated');
+          } else {
+            if (studentView) studentView.style.display = 'block';
+            if (teacherView) teacherView.style.display = 'none';
+            if (teacherStats) teacherStats.style.display = 'none';
+            if (studentProgress) studentProgress.style.display = 'grid';
+            if (chartTitle) chartTitle.textContent = 'Task Completion Trend';
+            console.log('✅ Student view activated');
           }
-          if (wp) {
-            wp.style.width = weeklyProgress + '%';
-            wp.textContent = weeklyProgress + '%';
+        } catch (viewError) {
+          console.error('❌ Error setting views:', viewError);
+        }
+
+        // Load user-specific data
+        if (!isAdmin) {
+          try {
+            console.log('🔍 Loading student stats...');
+            // Student stats
+            const tasks = JSON.parse(localStorage.getItem('userTasks') || '[]');
+            const notes = JSON.parse(localStorage.getItem('userNotes') || '[]');
+            const attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
+
+            const totalTasks = tasks.length;
+            const completedTasks = tasks.filter(t => t && t.status === 'Done').length || 0;
+            const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+            const notesCount = notes.length;
+            const weeklyProgress = Math.min(Math.round((completedTasks / 10) * 100), 100);
+            console.log('📊 Stats:', { totalTasks, completedTasks, completionRate, notesCount, weeklyProgress });
+
+            // Calculate monthly attendance - user-specific
+            const now = new Date();
+            const currentMonth = now.getMonth();
+            const currentYear = now.getFullYear();
+            let daysPresent = 0;
+            let totalDays = 0;
+
+            if (userEmail) {
+              Object.keys(attendance).forEach(key => {
+                const record = attendance[key];
+                if (!record) return;
+
+                // Check if this record belongs to current user
+                const belongsToUser = (record.email === userEmail) || key.startsWith(userEmail + '_');
+                if (!belongsToUser) return;
+
+                try {
+                  const recordDate = record.date ? new Date(record.date) : new Date((key.split('_')[1] || ''));
+                  if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) {
+                    totalDays++;
+                    if (record.status === 'Present') daysPresent++;
+                  }
+                } catch (e) {
+                  console.error('Date parsing error:', e);
+                }
+              });
+            }
+
+            const monthlyAttendance = totalDays > 0 ? Math.round((daysPresent / totalDays) * 100) : 0;
+            console.log('📊 Attendance:', { daysPresent, totalDays, monthlyAttendance });
+
+            // Update UI elements
+            console.log('🔍 Updating UI elements...');
+            const totalEl = document.getElementById('totalTasks');
+            const compEl = document.getElementById('completedTasks');
+            const notesEl = document.getElementById('notesCount');
+            const attEl = document.getElementById('attendancePercent');
+
+            if (totalEl) {
+              totalEl.textContent = totalTasks;
+              console.log('✅ Total tasks updated');
+            }
+            if (compEl) {
+              compEl.textContent = completedTasks;
+              console.log('✅ Completed tasks updated');
+            }
+            if (notesEl) {
+              notesEl.textContent = notesCount;
+              console.log('✅ Notes count updated');
+            }
+            if (attEl) {
+              attEl.textContent = monthlyAttendance + '%';
+              console.log('✅ Attendance updated');
+            }
+
+            // Animate progress bars
+            setTimeout(() => {
+              try {
+                const tp = document.getElementById('taskProgress');
+                const wp = document.getElementById('weeklyProgress');
+                if (tp) {
+                  tp.style.width = completionRate + '%';
+                  tp.textContent = completionRate + '%';
+                  console.log('✅ Task progress bar animated');
+                }
+                if (wp) {
+                  wp.style.width = weeklyProgress + '%';
+                  wp.textContent = weeklyProgress + '%';
+                  console.log('✅ Weekly progress bar animated');
+                }
+              } catch (progressError) {
+                console.error('❌ Error animating progress bars:', progressError);
+              }
+            }, 100);
+          } catch (statsError) {
+            console.error('❌ Error loading student stats:', statsError);
+            console.error('Stack:', statsError.stack);
           }
-        }, 100);
+        }
+      } catch (error) {
+        console.error('❌ Critical error in loadStats():', error);
+        console.error('Stack:', error.stack);
       }
     }
 
@@ -632,101 +727,168 @@
 
     // ===== Initialize Dashboard =====
     document.addEventListener('DOMContentLoaded', () => {
-      // Check authentication
-      if (!checkAuth()) {
-        return; // Will redirect to login
-      }
+      try {
+        console.log('%c✅ Dashboard DOMContentLoaded triggered', 'color: green; font-weight: bold; font-size: 14px');
 
-      // Initialize theme
-      const savedTheme = localStorage.getItem('theme') || 'light';
-      if (savedTheme === 'dark') {
-        document.documentElement.classList.add('dark');
-      }
-
-      // Update theme icons
-      const iconMoon = document.getElementById('iconMoon');
-      const iconSun = document.getElementById('iconSun');
-      if (iconMoon && iconSun) {
-        const isDark = document.documentElement.classList.contains('dark');
-        iconMoon.classList.toggle('hidden', isDark);
-        iconSun.classList.toggle('hidden', !isDark);
-      }
-
-      // Load user stats and data
-      loadStats();
-      
-      // Initialize chart after a delay to ensure DOM is ready
-      setTimeout(initChart, 300);
-      
-      // Start time updater
-      updateTime();
-      setInterval(updateTime, 1000);
-
-      // Attach event handlers
-      const logoutBtn = document.getElementById('logoutBtn');
-      if (logoutBtn) {
-        logoutBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          logout();
-        });
-      }
-
-      const themeBtn = document.getElementById('themeToggleBtn');
-      if (themeBtn) {
-        themeBtn.addEventListener('click', toggleDarkMode);
-      }
-
-      const mobileBtn = document.getElementById('mobileMenuBtn');
-      if (mobileBtn) {
-        mobileBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          toggleSidebar();
-        });
-        mobileBtn.setAttribute('aria-controls', 'sidebar');
-        mobileBtn.setAttribute('aria-expanded', 'false');
-      }
-
-      // Close sidebar on nav link click (mobile)
-      const sidebarLinks = document.querySelectorAll('.sidebar-link');
-      sidebarLinks.forEach(link => {
-        link.addEventListener('click', () => {
-          if (isMobile()) setTimeout(closeSidebar, 50);
-        });
-      });
-
-      // Close on Escape key
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeSidebar();
-      });
-
-      // Initial sidebar state for mobile
-      if (isMobile()) {
-        const sidebar = document.getElementById('sidebar');
-        if (sidebar) sidebar.classList.add('sidebar-closed');
-      }
-
-      // Resize handler
-      window.addEventListener('resize', () => {
-        if (window.innerWidth >= 768) {
-          const sidebar = document.getElementById('sidebar');
-          if (sidebar) {
-            sidebar.classList.remove('sidebar-closed');
-            sidebar.classList.add('sidebar-open');
-          }
-          hideOverlay();
-          document.documentElement.classList.remove('overflow-hidden');
-          document.body.classList.remove('overflow-hidden');
-        } else {
-          const sidebar = document.getElementById('sidebar');
-          if (sidebar && !sidebar.classList.contains('sidebar-open')) {
-            sidebar.classList.add('sidebar-closed');
-          }
+        // Step 1: Check authentication
+        console.log('📝 Step 1: Checking authentication...');
+        if (!checkAuth()) {
+          console.log('❌ Authentication check failed - redirecting to login');
+          return; // Will redirect to login
         }
-      });
+        console.log('✅ Authentication check passed');
 
-      // Initialize demo data if needed
-      initializeDemoData();
+        // Step 2: Initialize theme
+        try {
+          console.log('📝 Step 2: Initializing theme...');
+          const savedTheme = localStorage.getItem('theme') || 'light';
+          if (savedTheme === 'dark') {
+            document.documentElement.classList.add('dark');
+          }
+          console.log('✅ Theme initialized:', savedTheme);
+        } catch (themeError) {
+          console.error('❌ Theme initialization error:', themeError);
+        }
+
+        // Step 3: Update theme icons
+        try {
+          console.log('📝 Step 3: Updating theme icons...');
+          const iconMoon = document.getElementById('iconMoon');
+          const iconSun = document.getElementById('iconSun');
+          if (iconMoon && iconSun) {
+            const isDark = document.documentElement.classList.contains('dark');
+            iconMoon.classList.toggle('hidden', isDark);
+            iconSun.classList.toggle('hidden', !isDark);
+            console.log('✅ Theme icons updated');
+          } else {
+            console.warn('⚠️ Theme icons not found in DOM');
+          }
+        } catch (iconError) {
+          console.error('❌ Theme icon update error:', iconError);
+        }
+
+        // Step 4: Load user stats and data
+        try {
+          console.log('📝 Step 4: Loading user stats...');
+          loadStats();
+          console.log('✅ Stats loaded');
+        } catch (statsError) {
+          console.error('❌ Stats loading error:', statsError);
+          console.error('Stack:', statsError.stack);
+        }
+
+        // Step 5: Initialize chart
+        try {
+          console.log('📝 Step 5: Scheduling chart initialization...');
+          setTimeout(initChart, 300);
+          console.log('✅ Chart initialization scheduled');
+        } catch (chartError) {
+          console.error('❌ Chart initialization error:', chartError);
+        }
+
+        // Step 6: Start time updater
+        try {
+          console.log('📝 Step 6: Starting time updater...');
+          updateTime();
+          setInterval(updateTime, 1000);
+          console.log('✅ Time updater started');
+        } catch (timeError) {
+          console.error('❌ Time updater error:', timeError);
+        }
+
+        // Step 7: Attach event handlers
+        try {
+          console.log('📝 Step 7: Attaching event handlers...');
+          const logoutBtn = document.getElementById('logoutBtn');
+          if (logoutBtn) {
+            logoutBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              logout();
+            });
+            console.log('✅ Logout button bound');
+          }
+
+          const themeBtn = document.getElementById('themeToggleBtn');
+          if (themeBtn) {
+            themeBtn.addEventListener('click', toggleDarkMode);
+            console.log('✅ Theme toggle button bound');
+          }
+
+          const mobileBtn = document.getElementById('mobileMenuBtn');
+          if (mobileBtn) {
+            mobileBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              toggleSidebar();
+            });
+            mobileBtn.setAttribute('aria-controls', 'sidebar');
+            mobileBtn.setAttribute('aria-expanded', 'false');
+            console.log('✅ Mobile menu button bound');
+          }
+
+          // Close sidebar on nav link click (mobile)
+          const sidebarLinks = document.querySelectorAll('.sidebar-link');
+          sidebarLinks.forEach(link => {
+            link.addEventListener('click', () => {
+              if (isMobile()) setTimeout(closeSidebar, 50);
+            });
+          });
+          console.log('✅ Sidebar links bound:', sidebarLinks.length);
+
+          // Close on Escape key
+          document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeSidebar();
+          });
+          console.log('✅ Escape key handler bound');
+
+          // Initial sidebar state for mobile
+          if (isMobile()) {
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar) sidebar.classList.add('sidebar-closed');
+            console.log('✅ Mobile sidebar state initialized');
+          }
+
+          // Resize handler
+          window.addEventListener('resize', () => {
+            if (window.innerWidth >= 768) {
+              const sidebar = document.getElementById('sidebar');
+              if (sidebar) {
+                sidebar.classList.remove('sidebar-closed');
+                sidebar.classList.add('sidebar-open');
+              }
+              hideOverlay();
+              document.documentElement.classList.remove('overflow-hidden');
+              document.body.classList.remove('overflow-hidden');
+            } else {
+              const sidebar = document.getElementById('sidebar');
+              if (sidebar && !sidebar.classList.contains('sidebar-open')) {
+                sidebar.classList.add('sidebar-closed');
+              }
+            }
+          });
+          console.log('✅ Resize handler bound');
+
+          console.log('✅ All event handlers attached');
+        } catch (eventError) {
+          console.error('❌ Event handler attachment error:', eventError);
+        }
+
+        // Step 8: Initialize demo data
+        try {
+          console.log('📝 Step 8: Initializing demo data...');
+          initializeDemoData();
+          console.log('✅ Demo data initialized');
+        } catch (demoError) {
+          console.error('❌ Demo data initialization error:', demoError);
+        }
+
+        console.log('%c✅ Dashboard initialization completed successfully!', 'color: green; font-weight: bold; font-size: 14px');
+      } catch (error) {
+        console.error('%c❌ CRITICAL Dashboard initialization error:', 'color: red; font-weight: bold; font-size: 14px', error);
+        console.error('Error message:', error.message);
+        console.error('Stack trace:', error.stack);
+        alert('Dashboard initialization failed. Check browser console (F12) for details.');
+      }
     });
 
     function initializeDemoData() {

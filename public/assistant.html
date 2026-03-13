@@ -431,13 +431,45 @@
       if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         return 'http://localhost:4000';
       }
-      // For production, use relative path or your server URL
-      return '';
+      // For production, use current origin
+      return window.location.origin || '';
     })();
     
     const MAX_HISTORY = 10;
     const history = [];
     let isLoading = false;
+
+    // Authentication functions
+    function getAuthToken() {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        window.location.href = 'login.html';
+        return null;
+      }
+      return token;
+    }
+
+    async function fetchAPI(endpoint, options = {}) {
+      const token = getAuthToken();
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          ...options.headers
+        }
+      });
+
+      if (response.status === 401) {
+        localStorage.clear();
+        window.location.href = 'login.html';
+        throw new Error('Session expired');
+      }
+
+      return response;
+    }
 
     // Theme management
     function loadTheme() {
@@ -546,22 +578,83 @@
     // API communication
     async function callAssistantAPI(payload) {
       try {
-        const response = await fetch(API_BASE + '/api/assistant', {
+        const response = await fetchAPI('/api/assistant', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
           body: JSON.stringify(payload)
         });
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
+        if (!response) {
+          return {
+            reply: "I'm sorry, but I couldn't connect to the server. Please check your internet connection and try again.",
+            provider: 'offline'
+          };
         }
-        
-        return await response.json();
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('API Error:', response.status, errorData);
+
+          // Provide specific error messages based on status
+          if (response.status === 401) {
+            return {
+              reply: "Your session has expired. Please log in again to continue using the assistant.",
+              provider: 'error'
+            };
+          } else if (response.status === 429) {
+            return {
+              reply: "I'm receiving too many requests right now. Please wait a moment and try again.",
+              provider: 'error'
+            };
+          } else if (response.status >= 500) {
+            return {
+              reply: "The server is experiencing issues. Please try again in a few minutes.",
+              provider: 'error'
+            };
+          } else {
+            return {
+              reply: `I encountered an error (${response.status}). Please try rephrasing your question.`,
+              provider: 'error'
+            };
+          }
+        }
+
+        const data = await response.json();
+
+        // Validate response structure
+        if (!data || typeof data !== 'object') {
+          return {
+            reply: "I received an invalid response from the server. Please try again.",
+            provider: 'error'
+          };
+        }
+
+        return data;
+
       } catch (error) {
-        console.error('API Error:', error);
-        throw error;
+        console.error('Network/API Error:', error);
+
+        // Provide helpful fallback messages based on error type
+        if (error.message.includes('fetch') || error.message.includes('Network')) {
+          return {
+            reply: "Network connection error. Please check your internet connection and make sure the server is running.",
+            provider: 'offline'
+          };
+        } else if (error.message.includes('CORS')) {
+          return {
+            reply: "Cross-origin request blocked. This might be a server configuration issue.",
+            provider: 'error'
+          };
+        } else if (error.message.includes('JSON')) {
+          return {
+            reply: "Received invalid data from the server. Please try again.",
+            provider: 'error'
+          };
+        } else {
+          return {
+            reply: `An unexpected error occurred: ${error.message}. Please try again.`,
+            provider: 'error'
+          };
+        }
       }
     }
     
@@ -609,6 +702,22 @@
         hideLoading();
         
         let reply = data.reply || data.response || data.message || 'I apologize, but I could not generate a response.';
+        const provider = data.provider || 'unknown';
+        
+        // Handle different response types
+        if (provider === 'offline') {
+          reply = `<div style="padding: 15px; background: rgba(255, 193, 7, 0.1); border: 1px solid #ffc107; border-radius: 8px; margin-bottom: 10px;">
+            <i class="fas fa-wifi-slash" style="color: #856404;"></i> <strong>Connection Issue:</strong> ${reply}
+          </div>`;
+        } else if (provider === 'error') {
+          reply = `<div style="padding: 15px; background: rgba(220, 53, 69, 0.1); border: 1px solid #dc3545; border-radius: 8px; margin-bottom: 10px;">
+            <i class="fas fa-exclamation-triangle" style="color: #721c24;"></i> <strong>Error:</strong> ${reply}
+          </div>`;
+        } else if (provider === 'fallback') {
+          reply = `<div style="padding: 15px; background: rgba(108, 117, 125, 0.1); border: 1px solid #6c757d; border-radius: 8px; margin-bottom: 10px;">
+            <i class="fas fa-info-circle" style="color: #383d41;"></i> <strong>Note:</strong> ${reply}
+          </div>`;
+        }
         
         // Add note previews if available
         if (relevantNotes.length > 0) {
@@ -663,11 +772,17 @@
         hideLoading();
         console.error('Error:', error);
         
-        let errorMessage = 'Sorry, I encountered an error. Please try again.';
-        if (error.message.includes('fetch') || error.message.includes('Network')) {
+        // Since callAssistantAPI now handles errors internally, this catch block
+        // should only trigger for unexpected errors
+        let errorMessage = 'Sorry, I encountered an unexpected error. Please try again.';
+        
+        if (error.message.includes('Session expired') || error.message.includes('401')) {
+          errorMessage = 'Your session has expired. Please log in again.';
+          setTimeout(() => {
+            window.location.href = 'login.html';
+          }, 2000);
+        } else if (error.message.includes('Network') || error.message.includes('fetch')) {
           errorMessage = 'Network error. Please check your connection and try again.';
-        } else if (error.message.includes('404')) {
-          errorMessage = 'API endpoint not found. Please make sure the server is running.';
         }
         
         appendMessage(`<i class="fas fa-exclamation-triangle"></i> ${errorMessage}`, 'bot', true);
@@ -711,6 +826,13 @@
     document.addEventListener('DOMContentLoaded', () => {
       // Load theme
       loadTheme();
+      
+      // Check authentication
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        window.location.href = 'login.html';
+        return;
+      }
       
       // Focus input
       input.focus();

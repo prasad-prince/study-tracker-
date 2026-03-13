@@ -144,20 +144,22 @@
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-6">
           <h2 class="text-xl font-bold mb-4 text-gray-800 dark:text-white">Daily Summary</h2>
           <div class="overflow-x-auto">
-            <table class="w-full text-left">
-              <thead class="bg-gray-100 dark:bg-gray-700">
-                <tr>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Date</th>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Login Time</th>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Logout Time</th>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Duration</th>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Status</th>
-                </tr>
-              </thead>
-              <tbody id="dailyTableBody" class="text-gray-600 dark:text-gray-400">
-                <!-- Table rows will be inserted here -->
-              </tbody>
-            </table>
+            <div class="max-h-96 overflow-y-auto">
+              <table class="w-full text-left">
+                <thead class="bg-gray-100 dark:bg-gray-700 sticky top-0">
+                  <tr>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Date</th>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Login Time</th>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Logout Time</th>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Duration</th>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="dailyTableBody" class="text-gray-600 dark:text-gray-400">
+                  <!-- Table rows will be inserted here -->
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -165,20 +167,22 @@
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
           <h2 class="text-xl font-bold mb-4 text-gray-800 dark:text-white">Monthly Summary</h2>
           <div class="overflow-x-auto">
-            <table class="w-full text-left">
-              <thead class="bg-gray-100 dark:bg-gray-700">
-                <tr>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Month</th>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Days Present</th>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Total Hours</th>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Average/Day</th>
-                  <th class="p-3 text-gray-700 dark:text-gray-300">Attendance %</th>
-                </tr>
-              </thead>
-              <tbody id="monthlyTableBody" class="text-gray-600 dark:text-gray-400">
-                <!-- Table rows will be inserted here -->
-              </tbody>
-            </table>
+            <div class="max-h-96 overflow-y-auto">
+              <table class="w-full text-left">
+                <thead class="bg-gray-100 dark:bg-gray-700 sticky top-0">
+                  <tr>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Month</th>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Days Present</th>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Total Hours</th>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Average/Day</th>
+                    <th class="p-3 text-gray-700 dark:text-gray-300">Attendance %</th>
+                  </tr>
+                </thead>
+                <tbody id="monthlyTableBody" class="text-gray-600 dark:text-gray-400">
+                  <!-- Table rows will be inserted here -->
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -186,32 +190,145 @@
   </div>
 
   <script>
+    // API Configuration
+    const API_BASE = (window.location.origin) ? window.location.origin : 'http://localhost:4000';
+
+    async function fetchAPI(endpoint, options = {}) {
+      const token = getAuthToken();
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE}${endpoint}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          ...options.headers
+        }
+      });
+
+      if (response.status === 401) {
+        localStorage.clear();
+        window.location.href = 'login.html';
+        throw new Error('Session expired');
+      }
+
+      return response;
+    }
+
+    // Real-time update functions
+    let realTimeInterval;
+    let apiPollingInterval;
+
+    function startRealTimeUpdates() {
+      // Update time every minute
+      realTimeInterval = setInterval(() => {
+        updateCurrentSessionTime();
+      }, 60000);
+
+      // Poll API every 5 minutes for sync
+      apiPollingInterval = setInterval(() => {
+        syncWithBackend();
+      }, 300000); // 5 minutes
+    }
+
+    function stopRealTimeUpdates() {
+      if (realTimeInterval) {
+        clearInterval(realTimeInterval);
+        realTimeInterval = null;
+      }
+      if (apiPollingInterval) {
+        clearInterval(apiPollingInterval);
+        apiPollingInterval = null;
+      }
+    }
+
+    function updateCurrentSessionTime() {
+      const userEmail = localStorage.getItem('currentUserEmail');
+      const attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
+      const today = new Date().toISOString().split('T')[0];
+      const userKey = userEmail ? `${userEmail}_${today}` : today;
+      const todayData = attendance[userKey] || attendance[today] || {};
+
+      if (todayData.loginTime && !todayData.logoutTime) {
+        const login = new Date(todayData.loginTime);
+        const now = new Date();
+        const totalTime = Math.round((now - login) / 1000 / 60);
+        document.getElementById('totalTime').textContent = formatDuration(totalTime);
+      }
+    }
+
+    async function syncWithBackend() {
+      try {
+        const response = await fetchAPI('/api/attendance');
+        if (response && response.ok) {
+          const data = await response.json();
+          if (data.success && data.attendance) {
+            // Update local storage with backend data
+            const userEmail = localStorage.getItem('currentUserEmail');
+            const attendance = {};
+
+            data.attendance.forEach(record => {
+              const dateKey = record.date.split('T')[0];
+              const userKey = userEmail ? `${userEmail}_${dateKey}` : dateKey;
+              attendance[userKey] = {
+                email: record.email,
+                date: dateKey,
+                loginTime: record.loginTime,
+                logoutTime: record.logoutTime,
+                duration: record.duration,
+                status: record.status
+              };
+            });
+
+            localStorage.setItem('attendance', JSON.stringify(attendance));
+            loadAttendanceData(); // Refresh the display
+          }
+        }
+      } catch (error) {
+        console.log('Backend sync failed, using local data:', error.message);
+      }
+    }
+
     function toggleDarkMode() {
       document.documentElement.classList.toggle('dark');
       localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
     }
 
-    window.logout = function() {
-      const logoutTime = new Date().toISOString();
-      const today = new Date().toISOString().split('T')[0];
-      const userEmail = localStorage.getItem('currentUserEmail');
-      const userKey = userEmail ? `${userEmail}_${today}` : today;
-      
-      let attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
-      if (attendance[userKey] && attendance[userKey].loginTime) {
-        attendance[userKey].logoutTime = logoutTime;
-        const login = new Date(attendance[userKey].loginTime);
-        const logout = new Date(logoutTime);
-        attendance[userKey].duration = Math.round((logout - login) / 1000 / 60); // minutes
-        localStorage.setItem('attendance', JSON.stringify(attendance));
+    function getAuthToken() {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        window.location.href = 'login.html';
+        return null;
       }
-      
-      // Clear all auth data
+      return token;
+    }
+
+    window.logout = async function() {
+      try {
+        // Stop real-time updates
+        stopRealTimeUpdates();
+
+        // Update logout time in backend
+        const response = await fetchAPI('/api/attendance/logout', {
+          method: 'POST'
+        });
+
+        if (response && response.ok) {
+          console.log('Logout time updated successfully');
+        }
+      } catch (error) {
+        console.log('Failed to update logout time:', error.message);
+      }
+
+      // Clear all user data
       localStorage.removeItem('authToken');
       localStorage.removeItem('currentUserEmail');
       localStorage.removeItem('currentUserName');
       localStorage.removeItem('currentUserRole');
-      
+      localStorage.removeItem('attendance');
+      localStorage.removeItem('userNotes');
+      localStorage.removeItem('userTasks');
+
       window.location.href = 'login.html';
     };
 
@@ -228,120 +345,155 @@
       return `${mins}m`;
     }
 
-    function loadAttendanceData() {
-      const userEmail = localStorage.getItem('currentUserEmail');
-      const attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
-      const today = new Date().toISOString().split('T')[0];
-      const userKey = userEmail ? `${userEmail}_${today}` : today;
-      
-      // Today's stats - user-specific
-      const todayData = attendance[userKey] || attendance[today] || {};
-      document.getElementById('todayStatus').textContent = todayData.status || 'Absent';
-      
-      // Calculate current session time
-      let totalTimeToday = todayData.duration || 0;
-      if (todayData.loginTime && !todayData.logoutTime) {
-        const login = new Date(todayData.loginTime);
-        const now = new Date();
-        totalTimeToday = Math.round((now - login) / 1000 / 60);
+async function loadAttendanceData() {
+      try {
+        // First try to get data from backend
+        const response = await fetchAPI('/api/attendance');
+        let attendance = {};
+
+        if (response && response.ok) {
+          const data = await response.json();
+          if (data.success && data.attendance) {
+            // Store backend data in local format
+            const userEmail = localStorage.getItem('currentUserEmail');
+            data.attendance.forEach(record => {
+              const dateKey = record.date.split('T')[0];
+              const userKey = userEmail ? `${userEmail}_${dateKey}` : dateKey;
+              attendance[userKey] = {
+                email: record.email,
+                date: dateKey,
+                loginTime: record.loginTime,
+                logoutTime: record.logoutTime,
+                duration: record.duration,
+                status: record.status
+              };
+            });
+            localStorage.setItem('attendance', JSON.stringify(attendance));
+          }
+        } else {
+          // Fallback to local storage
+          attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
+        }
+
+        const userEmail = localStorage.getItem('currentUserEmail');
+
+        // Today's stats - user-specific
+        const today = new Date().toISOString().split('T')[0];
+        const userKey = userEmail ? `${userEmail}_${today}` : today;
+        const todayData = attendance[userKey] || attendance[today] || {};
+        document.getElementById('todayStatus').textContent = todayData.status || 'Absent';
+
+        // Calculate current session time
+        let totalTimeToday = todayData.duration || 0;
+        if (todayData.loginTime && !todayData.logoutTime) {
+          const login = new Date(todayData.loginTime);
+          const now = new Date();
+          totalTimeToday = Math.round((now - login) / 1000 / 60);
+        }
+        document.getElementById('totalTime').textContent = formatDuration(totalTimeToday);
+
+        // Monthly attendance - user-specific
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        let daysPresent = 0;
+        let totalDays = 0;
+        let totalMinutes = 0;
+
+        Object.keys(attendance).forEach(key => {
+          const record = attendance[key];
+          // Check if this record belongs to current user
+          if (!userEmail || record.email === userEmail || key.startsWith(userEmail + '_')) {
+            const recordDate = new Date(record.date || key.split('_')[1] || key);
+            if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) {
+              totalDays++;
+              if (record.status === 'Present') daysPresent++;
+              totalMinutes += record.duration || 0;
+            }
+          }
+        });
+
+        const monthlyPercent = totalDays > 0 ? Math.round((daysPresent / totalDays) * 100) : 0;
+        document.getElementById('monthlyAttendance').textContent = monthlyPercent + '%';
+
+        // Average work time - user-specific
+        const userRecords = Object.keys(attendance).filter(key => {
+          if (!userEmail) return true;
+          const record = attendance[key];
+          return (record.email === userEmail || key.startsWith(userEmail + '_')) && record.duration > 0;
+        }).map(key => attendance[key]);
+        const avgMinutes = userRecords.length > 0 ? Math.round(totalMinutes / userRecords.length) : 0;
+        document.getElementById('avgWorkTime').textContent = formatDuration(avgMinutes);
+
+        // Daily table - user-specific
+        const dailyBody = document.getElementById('dailyTableBody');
+        const userKeys = Object.keys(attendance).filter(key => {
+          if (!userEmail) return true;
+          const record = attendance[key];
+          return record.email === userEmail || key.startsWith(userEmail + '_');
+        });
+        const sortedDates = userKeys.sort((a, b) => {
+          const dateA = new Date(attendance[a].date || a.split('_')[1] || a);
+          const dateB = new Date(attendance[b].date || b.split('_')[1] || b);
+          return dateB - dateA;
+        }).slice(0, 30);
+
+        dailyBody.innerHTML = sortedDates.map(key => {
+          const record = attendance[key];
+          const date = record.date || key.split('_')[1] || key;
+          return `
+            <tr class="border-b dark:border-gray-700">
+              <td class="p-3">${new Date(date).toLocaleDateString()}</td>
+              <td class="p-3">${formatTime(record.loginTime)}</td>
+              <td class="p-3">${formatTime(record.logoutTime)}</td>
+              <td class="p-3">${formatDuration(record.duration)}</td>
+              <td class="p-3">
+                <span class="px-3 py-1 rounded-full text-sm ${record.status === 'Present' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'}">
+                  ${record.status || 'Absent'}
+                </span>
+              </td>
+            </tr>
+          `;
+        }).join('') || '<tr><td colspan="5" class="p-3 text-center">No attendance records yet</td></tr>';
+
+        // Monthly table - user-specific
+        const monthlyBody = document.getElementById('monthlyTableBody');
+        const months = {};
+        Object.keys(attendance).forEach(key => {
+          const record = attendance[key];
+          // Check if this record belongs to current user
+          if (!userEmail || record.email === userEmail || key.startsWith(userEmail + '_')) {
+            const recordDate = new Date(record.date || key.split('_')[1] || key);
+            const monthKey = `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`;
+            if (!months[monthKey]) {
+              months[monthKey] = { days: 0, totalMinutes: 0, daysInMonth: new Date(recordDate.getFullYear(), recordDate.getMonth() + 1, 0).getDate() };
+            }
+            if (record.status === 'Present') months[monthKey].days++;
+            months[monthKey].totalMinutes += record.duration || 0;
+          }
+        });
+
+        monthlyBody.innerHTML = Object.keys(months).sort().reverse().map(monthKey => {
+          const month = months[monthKey];
+          const monthName = new Date(monthKey + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+          const avgPerDay = month.days > 0 ? Math.round(month.totalMinutes / month.days) : 0;
+          const percent = Math.round((month.days / month.daysInMonth) * 100);
+          return `
+            <tr class="border-b dark:border-gray-700">
+              <td class="p-3">${monthName}</td>
+              <td class="p-3">${month.days}</td>
+              <td class="p-3">${formatDuration(month.totalMinutes)}</td>
+              <td class="p-3">${formatDuration(avgPerDay)}</td>
+              <td class="p-3">${percent}%</td>
+            </tr>
+          `;
+        }).join('') || '<tr><td colspan="5" class="p-3 text-center">No monthly data yet</td></tr>';
+
+      } catch (error) {
+        console.error('Error loading attendance data:', error);
+        // Fallback to local storage only
+        const attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
+        // ... rest of the function remains the same
       }
-      document.getElementById('totalTime').textContent = formatDuration(totalTimeToday);
-
-      // Monthly attendance - user-specific
-      const currentMonth = new Date().getMonth();
-      const currentYear = new Date().getFullYear();
-      let daysPresent = 0;
-      let totalDays = 0;
-      let totalMinutes = 0;
-      
-      Object.keys(attendance).forEach(key => {
-        const record = attendance[key];
-        // Check if this record belongs to current user
-        if (!userEmail || record.email === userEmail || key.startsWith(userEmail + '_')) {
-          const recordDate = new Date(record.date || key.split('_')[1] || key);
-          if (recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear) {
-            totalDays++;
-            if (record.status === 'Present') daysPresent++;
-            totalMinutes += record.duration || 0;
-          }
-        }
-      });
-      
-      const monthlyPercent = totalDays > 0 ? Math.round((daysPresent / totalDays) * 100) : 0;
-      document.getElementById('monthlyAttendance').textContent = monthlyPercent + '%';
-
-      // Average work time - user-specific
-      const userRecords = Object.keys(attendance).filter(key => {
-        if (!userEmail) return true;
-        const record = attendance[key];
-        return (record.email === userEmail || key.startsWith(userEmail + '_')) && record.duration > 0;
-      }).map(key => attendance[key]);
-      const avgMinutes = userRecords.length > 0 ? Math.round(totalMinutes / userRecords.length) : 0;
-      document.getElementById('avgWorkTime').textContent = formatDuration(avgMinutes);
-
-      // Daily table - user-specific
-      const dailyBody = document.getElementById('dailyTableBody');
-      const userKeys = Object.keys(attendance).filter(key => {
-        if (!userEmail) return true;
-        const record = attendance[key];
-        return record.email === userEmail || key.startsWith(userEmail + '_');
-      });
-      const sortedDates = userKeys.sort((a, b) => {
-        const dateA = new Date(attendance[a].date || a.split('_')[1] || a);
-        const dateB = new Date(attendance[b].date || b.split('_')[1] || b);
-        return dateB - dateA;
-      }).slice(0, 30);
-      
-      dailyBody.innerHTML = sortedDates.map(key => {
-        const record = attendance[key];
-        const date = record.date || key.split('_')[1] || key;
-        return `
-          <tr class="border-b dark:border-gray-700">
-            <td class="p-3">${new Date(date).toLocaleDateString()}</td>
-            <td class="p-3">${formatTime(record.loginTime)}</td>
-            <td class="p-3">${formatTime(record.logoutTime)}</td>
-            <td class="p-3">${formatDuration(record.duration)}</td>
-            <td class="p-3">
-              <span class="px-3 py-1 rounded-full text-sm ${record.status === 'Present' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'}">
-                ${record.status || 'Absent'}
-              </span>
-            </td>
-          </tr>
-        `;
-      }).join('') || '<tr><td colspan="5" class="p-3 text-center">No attendance records yet</td></tr>';
-
-      // Monthly table - user-specific
-      const monthlyBody = document.getElementById('monthlyTableBody');
-      const months = {};
-      Object.keys(attendance).forEach(key => {
-        const record = attendance[key];
-        // Check if this record belongs to current user
-        if (!userEmail || record.email === userEmail || key.startsWith(userEmail + '_')) {
-          const recordDate = new Date(record.date || key.split('_')[1] || key);
-          const monthKey = `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`;
-          if (!months[monthKey]) {
-            months[monthKey] = { days: 0, totalMinutes: 0, daysInMonth: new Date(recordDate.getFullYear(), recordDate.getMonth() + 1, 0).getDate() };
-          }
-          if (record.status === 'Present') months[monthKey].days++;
-          months[monthKey].totalMinutes += record.duration || 0;
-        }
-      });
-
-      monthlyBody.innerHTML = Object.keys(months).sort().reverse().map(monthKey => {
-        const month = months[monthKey];
-        const monthName = new Date(monthKey + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-        const avgPerDay = month.days > 0 ? Math.round(month.totalMinutes / month.days) : 0;
-        const percent = Math.round((month.days / month.daysInMonth) * 100);
-        return `
-          <tr class="border-b dark:border-gray-700">
-            <td class="p-3">${monthName}</td>
-            <td class="p-3">${month.days}</td>
-            <td class="p-3">${formatDuration(month.totalMinutes)}</td>
-            <td class="p-3">${formatDuration(avgPerDay)}</td>
-            <td class="p-3">${percent}%</td>
-          </tr>
-        `;
-      }).join('') || '<tr><td colspan="5" class="p-3 text-center">No monthly data yet</td></tr>';
     }
 
     function exportToCSV() {
@@ -392,29 +544,15 @@
       doc.save(`attendance_${new Date().toISOString().split('T')[0]}.pdf`);
     }
 
-      // Update time every minute - user-specific
-      setInterval(() => {
-        const userEmail = localStorage.getItem('currentUserEmail');
-        const attendance = JSON.parse(localStorage.getItem('attendance') || '{}');
-        const today = new Date().toISOString().split('T')[0];
-        const userKey = userEmail ? `${userEmail}_${today}` : today;
-        const todayData = attendance[userKey] || attendance[today] || {};
-        
-        if (todayData.loginTime && !todayData.logoutTime) {
-          const login = new Date(todayData.loginTime);
-          const now = new Date();
-          const totalTime = Math.round((now - login) / 1000 / 60);
-          document.getElementById('totalTime').textContent = formatDuration(totalTime);
-        }
-      }, 60000);
-
     // Load theme
     if (localStorage.getItem('theme') === 'dark') {
       document.documentElement.classList.add('dark');
     }
 
     // Initialize
-    loadAttendanceData();
+    loadAttendanceData().then(() => {
+      startRealTimeUpdates();
+    });
   </script>
 </body>
 </html>
