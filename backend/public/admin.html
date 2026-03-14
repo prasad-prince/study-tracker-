@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard - Study Tracker</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .navbar {
+      background: rgba(255, 255, 255, 0.95) !important;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .navbar-brand {
+      font-weight: 700;
+      color: #667eea !important;
+      font-size: 1.5rem;
+    }
+
+    .main-container {
+      padding: 30px 20px;
+      margin-top: 20px;
+    }
+
+    .stat-card {
+      background: white;
+      border-radius: 15px;
+      padding: 25px;
+      margin-bottom: 25px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    }
+
+    .stat-number {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #667eea;
+      margin: 10px 0;
+    }
+
+    .stat-label {
+      color: #666;
+      font-size: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .stat-icon {
+      font-size: 2.5rem;
+      color: #667eea;
+      opacity: 0.8;
+      margin-bottom: 10px;
+    }
+
+    .data-section {
+      background: white;
+      border-radius: 15px;
+      padding: 25px;
+      margin-bottom: 30px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .section-title {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #333;
+      margin-bottom: 20px;
+      border-bottom: 3px solid #667eea;
+      padding-bottom: 10px;
+    }
+
+    .table-responsive {
+      overflow-x: auto;
+    }
+
+    table {
+      margin-bottom: 0;
+    }
+
+    th {
+      background: #f8f9fa;
+      color: #333;
+      font-weight: 600;
+      border-bottom: 2px solid #667eea;
+      padding: 15px;
+      text-transform: uppercase;
+      font-size: 0.85rem;
+      letter-spacing: 0.5px;
+    }
+
+    td {
+      padding: 12px 15px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    tbody tr:hover {
+      background: #f8f9fa;
+    }
+
+    .badge-status {
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .badge-pending {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    .badge-done {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .badge-absent {
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    .badge-present {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #667eea;
+    }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 40px;
+      height: 40px;
+      border: 4px solid #e9ecef;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .navbar-nav .nav-link {
+      color: #333 !important;
+      margin-left: 15px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+    }
+
+    .navbar-nav .nav-link:hover {
+      color: #667eea !important;
+    }
+
+    .logout-btn {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+
+    .logout-btn:hover {
+      background: #c82333;
+      transform: scale(1.05);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      border-bottom: 2px solid #e9ecef;
+      margin-bottom: 20px;
+      overflow-x: auto;
+    }
+
+    .tab {
+      padding: 12px 20px;
+      cursor: pointer;
+      border: none;
+      background: none;
+      color: #666;
+      font-weight: 600;
+      border-bottom: 3px solid transparent;
+      transition: all 0.3s ease;
+      white-space: nowrap;
+    }
+
+    .tab.active {
+      color: #667eea;
+      border-bottom-color: #667eea;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .error-message {
+      background: #f8d7da;
+      color: #721c24;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+
+    .success-message {
+      background: #d4edda;
+      color: #155724;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-light">
+    <div class="container-xl">
+      <a class="navbar-brand" href="/">
+        <i class="fas fa-chart-line"></i> Admin Dashboard
+      </a>
+      <div class="ms-auto">
+        <span class="me-3" id="adminName">Admin</span>
+        <button type="button" class="logout-btn" onclick="logout()">
+          <i class="fas fa-sign-out-alt"></i> Logout
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Container -->
+  <div class="main-container">
+    <div class="container-xl">
+      <!-- Statistics -->
+      <div id="statsContainer">
+        <div class="loading">
+          <div class="loading-spinner"></div>
+          <p style="margin-top: 15px;">लोड हो रहा है...</p>
+        </div>
+      </div>
+
+      <!-- Tabs for Data -->
+      <div class="data-section" style="display: none;" id="dataSection">
+        <div class="tabs">
+          <button class="tab active" onclick="switchTab('users')">
+            <i class="fas fa-users"></i> Users
+          </button>
+          <button class="tab" onclick="switchTab('notes')">
+            <i class="fas fa-sticky-note"></i> Notes
+          </button>
+          <button class="tab" onclick="switchTab('tasks')">
+            <i class="fas fa-tasks"></i> Tasks
+          </button>
+          <button class="tab" onclick="switchTab('attendance')">
+            <i class="fas fa-calendar-check"></i> Attendance
+          </button>
+        </div>
+
+        <!-- Users Table -->
+        <div id="users" class="tab-content active">
+          <h3 class="section-title"><i class="fas fa-users"></i> सभी Users</h3>
+          <div id="usersContainer" class="loading">
+            <div class="loading-spinner"></div>
+          </div>
+        </div>
+
+        <!-- Notes Table -->
+        <div id="notes" class="tab-content">
+          <h3 class="section-title"><i class="fas fa-sticky-note"></i> सभी Notes</h3>
+          <div id="notesContainer" class="loading">
+            <div class="loading-spinner"></div>
+          </div>
+        </div>
+
+        <!-- Tasks Table -->
+        <div id="tasks" class="tab-content">
+          <h3 class="section-title"><i class="fas fa-tasks"></i> सभी Tasks</h3>
+          <div id="tasksContainer" class="loading">
+            <div class="loading-spinner"></div>
+          </div>
+        </div>
+
+        <!-- Attendance Table -->
+        <div id="attendance" class="tab-content">
+          <h3 class="section-title"><i class="fas fa-calendar-check"></i> Attendance Records</h3>
+          <div id="attendanceContainer" class="loading">
+            <div class="loading-spinner"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = (window && window.location && window.location.origin)
+      ? window.location.origin
+      : 'http://localhost:4000';
+
+    function getAuthToken() {
+      return localStorage.getItem('authToken');
+    }
+
+    async function apiCall(endpoint, method = 'GET') {
+      const token = getAuthToken();
+
+      if (!token) {
+        console.error('❌ Token not found');
+        window.location.href = 'login.html';
+        return null;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}${endpoint}`, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        console.error(`❌ API Error: ${endpoint}`, error);
+        return null;
+      }
+    }
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = 'login.html';
+    }
+
+    function switchTab(tabName) {
+      // Hide all tabs
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+      });
+
+      // Remove active from all tab buttons
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('active');
+      });
+
+      // Show selected tab
+      document.getElementById(tabName)?.classList.add('active');
+
+      // Add active class to clicked tab
+      event.target.closest('.tab')?.classList.add('active');
+    }
+
+    // Load Statistics
+    async function loadStats() {
+      const statsData = await apiCall('/api/admin/stats');
+
+      if (!statsData || !statsData.stats) {
+        console.error('Failed to load statistics');
+        return;
+      }
+
+      const stats = statsData.stats;
+      const statsHTML = `
+        <div class="row">
+          <div class="col-md-3 col-sm-6">
+            <div class="stat-card">
+              <div class="stat-icon"><i class="fas fa-users"></i></div>
+              <div class="stat-label">कुल Users</div>
+              <div class="stat-number">${stats.totalUsers}</div>
+            </div>
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <div class="stat-card">
+              <div class="stat-icon"><i class="fas fa-sticky-note"></i></div>
+              <div class="stat-label">कुल Notes</div>
+              <div class="stat-number">${stats.totalNotes}</div>
+            </div>
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <div class="stat-card">
+              <div class="stat-icon"><i class="fas fa-tasks"></i></div>
+              <div class="stat-label">कुल Tasks</div>
+              <div class="stat-number">${stats.totalTasks}</div>
+            </div>
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <div class="stat-card">
+              <div class="stat-icon"><i class="fas fa-calendar-check"></i></div>
+              <div class="stat-label">Attendance</div>
+              <div class="stat-number">${stats.totalAttendance}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top: 20px;">
+          <div class="col-md-3 col-sm-6">
+            <div class="stat-card">
+              <div class="stat-icon"><i class="fas fa-check-circle" style="color: #28a745;"></i></div>
+              <div class="stat-label">Tasks पूरे</div>
+              <div class="stat-number" style="color: #28a745;">${stats.tasksCompleted}</div>
+            </div>
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <div class="stat-card">
+              <div class="stat-icon"><i class="fas fa-hourglass-half" style="color: #ffc107;"></i></div>
+              <div class="stat-label">Pending</div>
+              <div class="stat-number" style="color: #ffc107;">${stats.tasksPending}</div>
+            </div>
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <div class="stat-card">
+              <div class="stat-icon"><i class="fas fa-spin" style="color: #17a2b8;"></i></div>
+              <div class="stat-label">Progress में</div>
+              <div class="stat-number" style="color: #17a2b8;">${stats.tasksInProgress}</div>
+            </div>
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <div class="stat-card">
+              <div class="stat-icon"><i class="fas fa-user-check" style="color: #28a745;"></i></div>
+              <div class="stat-label">आज Present</div>
+              <div class="stat-number" style="color: #28a745;">${stats.presentToday}</div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('statsContainer').innerHTML = statsHTML;
+      document.getElementById('dataSection').style.display = 'block';
+
+      // Load data tables
+      loadUsers();
+      loadNotes();
+      loadTasks();
+      loadAttendance();
+    }
+
+    async function loadUsers() {
+      const data = await apiCall('/api/admin/users');
+
+      if (!data || !data.users) {
+        document.getElementById('usersContainer').innerHTML = '<p class="error-message">No users found</p>';
+        return;
+      }
+
+      let html = `
+        <div class="table-responsive">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>नाम</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      data.users.forEach((user, idx) => {
+        html += `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${user.name}</td>
+            <td>${user.email}</td>
+            <td><span class="badge bg-info">${user.role}</span></td>
+            <td>${new Date(user.createdAt).toLocaleDateString('hi-IN')}</td>
+          </tr>
+        `;
+      });
+
+      html += '</tbody></table></div>';
+      document.getElementById('usersContainer').innerHTML = html;
+    }
+
+    async function loadNotes() {
+      const data = await apiCall('/api/admin/notes');
+
+      if (!data || !data.notes) {
+        document.getElementById('notesContainer').innerHTML = '<p class="error-message">No notes found</p>';
+        return;
+      }
+
+      let html = `
+        <div class="table-responsive">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>User</th>
+                <th>Content</th>
+                <th>Files</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      data.notes.forEach((note, idx) => {
+        const preview = note.text.substring(0, 50) + (note.text.length > 50 ? '...' : '');
+        html += `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${note.userId?.name || 'Unknown'}</td>
+            <td>${preview}</td>
+            <td>${note.files?.length || 0}</td>
+            <td>${new Date(note.createdAt).toLocaleDateString('hi-IN')}</td>
+          </tr>
+        `;
+      });
+
+      html += '</tbody></table></div>';
+      document.getElementById('notesContainer').innerHTML = html;
+    }
+
+    async function loadTasks() {
+      const data = await apiCall('/api/admin/tasks');
+
+      if (!data || !data.tasks) {
+        document.getElementById('tasksContainer').innerHTML = '<p class="error-message">No tasks found</p>';
+        return;
+      }
+
+      let html = `
+        <div class="table-responsive">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>User</th>
+                <th>Task</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Deadline</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      data.tasks.forEach((task, idx) => {
+        const statusClass = task.status === 'Done' ? 'badge-done' : 'badge-pending';
+        const deadline = task.deadline ? new Date(task.deadline).toLocaleDateString('hi-IN') : '-';
+
+        html += `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${task.userId?.name || 'Unknown'}</td>
+            <td>${task.text.substring(0, 40)}</td>
+            <td><span class="badge bg-warning">${task.priority}</span></td>
+            <td><span class="badge-status ${statusClass}">${task.status}</span></td>
+            <td>${deadline}</td>
+          </tr>
+        `;
+      });
+
+      html += '</tbody></table></div>';
+      document.getElementById('tasksContainer').innerHTML = html;
+    }
+
+    async function loadAttendance() {
+      const data = await apiCall('/api/admin/attendance');
+
+      if (!data || !data.attendance) {
+        document.getElementById('attendanceContainer').innerHTML = '<p class="error-message">No attendance records found</p>';
+        return;
+      }
+
+      let html = `
+        <div class="table-responsive">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>User</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Duration</th>
+                <th>Login Time</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      data.attendance.slice(0, 100).forEach((att, idx) => {
+        const statusClass = att.status === 'Present' ? 'badge-present' : 'badge-absent';
+        const loginTime = att.loginTime ? new Date(att.loginTime).toLocaleTimeString('hi-IN') : '-';
+
+        html += `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${att.userId?.name || att.email}</td>
+            <td>${new Date(att.date).toLocaleDateString('hi-IN')}</td>
+            <td><span class="badge-status ${statusClass}">${att.status}</span></td>
+            <td>${att.duration} min</td>
+            <td>${loginTime}</td>
+          </tr>
+        `;
+      });
+
+      html += '</tbody></table></div>';
+      document.getElementById('attendanceContainer').innerHTML = html;
+    }
+
+    // Initialize
+    window.addEventListener('DOMContentLoaded', () => {
+      const token = getAuthToken();
+      const adminName = localStorage.getItem('currentUserName') || 'Admin';
+
+      if (!token) {
+        window.location.href = 'login.html';
+        return;
+      }
+
+      document.getElementById('adminName').textContent = `🔐 ${adminName}`;
+      loadStats();
+    });
+  </script>
+</body>
+</html>

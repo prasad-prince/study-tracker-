@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Tasks - Study Tracker</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+      transition: background 0.3s ease;
+    }
+    body.dark-mode {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    }
+    .tasks-container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    .tasks-card {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      padding: 30px;
+      transition: all 0.3s ease;
+      animation: fadeIn 0.6s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    body.dark-mode .tasks-card {
+      background: #2d2d2d;
+      color: #f0f0f0;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+    .add-task-form {
+      background: #f8f9fa;
+      border-radius: 15px;
+      padding: 25px;
+      margin-bottom: 25px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      animation: fadeIn 0.8s ease;
+    }
+    body.dark-mode .add-task-form {
+      background: #3d3d3d;
+    }
+    .task-item {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 15px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      animation: fadeIn 1s ease;
+      border-left: 5px solid #ddd;
+    }
+    .task-item:hover {
+      transform: translateX(5px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+    }
+    .task-item.priority-high { border-left-color: #ff4444; }
+    .task-item.priority-medium { border-left-color: #ff9800; }
+    .task-item.priority-low { border-left-color: #4CAF50; }
+    .task-item.status-done {
+      opacity: 0.7;
+      text-decoration: line-through;
+    }
+    body.dark-mode .task-item {
+      background: #3d3d3d;
+      color: white;
+    }
+    .task-content {
+      flex: 1;
+      margin-right: 15px;
+    }
+    .task-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #333;
+    }
+    body.dark-mode .task-title {
+      color: #f0f0f0;
+    }
+    .task-meta {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+      font-size: 13px;
+      color: #666;
+      margin-top: 8px;
+    }
+    body.dark-mode .task-meta {
+      color: #aaa;
+    }
+    .priority-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .priority-high { background: #ffebee; color: #c62828; }
+    .priority-medium { background: #fff3e0; color: #e65100; }
+    .priority-low { background: #e8f5e9; color: #2e7d32; }
+    body.dark-mode .priority-high { background: #5a2a2a; color: #ff6b6b; }
+    body.dark-mode .priority-medium { background: #5a3a2a; color: #ffa726; }
+    body.dark-mode .priority-low { background: #2a5a2a; color: #66bb6a; }
+    .status-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .status-pending { background: #fff3e0; color: #e65100; }
+    .status-done { background: #e8f5e9; color: #2e7d32; }
+    body.dark-mode .status-pending { background: #5a3a2a; color: #ffa726; }
+    body.dark-mode .status-done { background: #2a5a2a; color: #66bb6a; }
+    .task-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-action {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.3s ease;
+    }
+    .btn-edit {
+      background: #2196F3;
+      color: white;
+    }
+    .btn-edit:hover {
+      background: #1976D2;
+      transform: scale(1.05);
+    }
+    .btn-delete {
+      background: #ff4444;
+      color: white;
+    }
+    .btn-delete:hover {
+      background: #cc0000;
+      transform: scale(1.05);
+    }
+    .btn-toggle {
+      background: #4CAF50;
+      color: white;
+    }
+    .btn-toggle:hover {
+      background: #388E3C;
+      transform: scale(1.05);
+    }
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+    .error-message {
+      background: #ffebee;
+      color: #c62828;
+      padding: 15px;
+      border-radius: 10px;
+      margin: 15px 0;
+    }
+  </style>
+</head>
+<body class="light-mode">
+  <div class="tasks-container">
+    <div class="tasks-card">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-tasks"></i> My Tasks</h2>
+        <div>
+          <a href="dashboard.html" class="btn btn-outline-primary me-2">
+            <i class="fas fa-arrow-left"></i> Back
+          </a>
+          <button class="btn btn-outline-dark" onclick="toggleDarkMode()">
+            <i class="fas fa-moon"></i> Dark Mode
+          </button>
+        </div>
+      </div>
+
+      <!-- Add Task Form -->
+      <div class="add-task-form">
+        <h4><i class="fas fa-plus-circle"></i> Add New Task</h4>
+        <form id="addTaskForm">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Task Description</label>
+              <input type="text" class="form-control" id="taskInput" placeholder="Enter your task..." required>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Priority</label>
+              <select class="form-control" id="priorityInput">
+                <option value="low">Low</option>
+                <option value="medium" selected>Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Deadline</label>
+              <input type="date" class="form-control" id="deadlineInput">
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary mt-3">
+            <i class="fas fa-plus"></i> Add Task
+          </button>
+        </form>
+      </div>
+
+      <!-- Error Message -->
+      <div id="errorMessage" class="error-message" style="display: none;"></div>
+
+      <!-- Tasks List -->
+      <div id="tasksList">
+        <h4><i class="fas fa-list"></i> Your Tasks</h4>
+        <div id="tasksContainer" class="loading">
+          <i class="fas fa-spinner fa-spin"></i> Loading tasks...
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Task Modal -->
+  <div class="modal fade" id="editTaskModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Edit Task</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="editTaskForm">
+            <div class="mb-3">
+              <label class="form-label">Task Description</label>
+              <input type="text" class="form-control" id="editTaskInput" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Priority</label>
+              <select class="form-control" id="editPriorityInput">
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Deadline</label>
+              <input type="date" class="form-control" id="editDeadlineInput">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Status</label>
+              <select class="form-control" id="editStatusInput">
+                <option value="Pending">Pending</option>
+                <option value="Done">Done</option>
+              </select>
+            </div>
+            <input type="hidden" id="editTaskId">
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" onclick="saveEditedTask()">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const API_BASE = (window.location.origin) ? window.location.origin : 'http://localhost:4000';
+    
+    function toggleDarkMode() {
+      document.body.classList.toggle("dark-mode");
+      document.body.classList.toggle("light-mode");
+      const isDark = document.body.classList.contains("dark-mode");
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+      const btn = document.querySelector('button[onclick="toggleDarkMode()"]');
+      if (btn) {
+        btn.innerHTML = isDark 
+          ? '<i class="fas fa-sun"></i> Light Mode' 
+          : '<i class="fas fa-moon"></i> Dark Mode';
+      }
+    }
+
+    function showError(message) {
+      const errorDiv = document.getElementById('errorMessage');
+      errorDiv.textContent = message;
+      errorDiv.style.display = 'block';
+      setTimeout(() => {
+        errorDiv.style.display = 'none';
+      }, 5000);
+    }
+
+    function getAuthToken() {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        window.location.href = 'login.html';
+        return null;
+      }
+      return token;
+    }
+
+    async function loadTasks() {
+      const token = getAuthToken();
+      if (!token) return;
+
+      try {
+        const response = await fetch(`${API_BASE}/api/tasks`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to load tasks');
+        }
+
+        const data = await response.json();
+        displayTasks(data.tasks || []);
+      } catch (error) {
+        console.error('Load tasks error:', error);
+        showError('Failed to load tasks. Please try again.');
+        document.getElementById('tasksContainer').innerHTML = '<p class="text-danger text-center">Failed to load tasks</p>';
+      }
+    }
+
+    function displayTasks(tasks) {
+      const container = document.getElementById('tasksContainer');
+      
+      if (tasks.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center p-4">No tasks yet. Add your first task above!</p>';
+        return;
+      }
+
+      container.innerHTML = tasks.map((task) => {
+        const priorityClass = `priority-${task.priority || 'medium'}`;
+        const statusClass = `status-${task.status?.toLowerCase() || 'pending'}`;
+        const deadline = task.deadline ? new Date(task.deadline).toLocaleDateString() : 'No deadline';
+        const isOverdue = task.deadline && new Date(task.deadline) < new Date() && task.status !== 'Done';
+        
+        return `
+          <div class="task-item ${priorityClass} ${task.status === 'Done' ? 'status-done' : ''} ${isOverdue ? 'border-warning' : ''}">
+            <div class="task-content">
+              <div class="task-title">${task.text}</div>
+              <div class="task-meta">
+                <span class="priority-badge ${priorityClass}">${task.priority || 'medium'}</span>
+                <span class="status-badge ${statusClass}">${task.status || 'Pending'}</span>
+                <span><i class="fas fa-calendar"></i> ${deadline}</span>
+                ${isOverdue ? '<span style="color: #ff4444;"><i class="fas fa-exclamation-triangle"></i> Overdue</span>' : ''}
+              </div>
+            </div>
+            <div class="task-actions">
+              <button class="btn-action btn-toggle" onclick="toggleTaskStatus('${task._id}')" title="Toggle Status">
+                <i class="fas fa-check"></i>
+              </button>
+              <button class="btn-action btn-edit" onclick="editTask('${task._id}')" title="Edit">
+                <i class="fas fa-edit"></i>
+              </button>
+              <button class="btn-action btn-delete" onclick="deleteTask('${task._id}')" title="Delete">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function addTask(e) {
+      e.preventDefault();
+      const token = getAuthToken();
+      if (!token) return;
+
+      const taskText = document.getElementById('taskInput').value.trim();
+      const priority = document.getElementById('priorityInput').value;
+      const deadline = document.getElementById('deadlineInput').value;
+      
+      if (!taskText) return;
+
+      try {
+        const response = await fetch(`${API_BASE}/api/tasks`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            text: taskText,
+            priority: priority,
+            deadline: deadline || null
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to create task');
+        }
+
+        document.getElementById('addTaskForm').reset();
+        await loadTasks();
+      } catch (error) {
+        console.error('Add task error:', error);
+        showError('Failed to add task. Please try again.');
+      }
+    }
+
+    async function editTask(taskId) {
+      const token = getAuthToken();
+      if (!token) return;
+
+      try {
+        const response = await fetch(`${API_BASE}/api/tasks`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        const data = await response.json();
+        const task = data.tasks.find(t => t._id === taskId);
+        
+        if (!task) return;
+
+        document.getElementById('editTaskInput').value = task.text;
+        document.getElementById('editPriorityInput').value = task.priority || 'medium';
+        document.getElementById('editDeadlineInput').value = task.deadline ? task.deadline.split('T')[0] : '';
+        document.getElementById('editStatusInput').value = task.status || 'Pending';
+        document.getElementById('editTaskId').value = taskId;
+        
+        const modal = new bootstrap.Modal(document.getElementById('editTaskModal'));
+        modal.show();
+      } catch (error) {
+        console.error('Edit task error:', error);
+        showError('Failed to load task details.');
+      }
+    }
+
+    async function saveEditedTask() {
+      const token = getAuthToken();
+      if (!token) return;
+
+      const taskId = document.getElementById('editTaskId').value;
+      
+      try {
+        const response = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            text: document.getElementById('editTaskInput').value.trim(),
+            priority: document.getElementById('editPriorityInput').value,
+            status: document.getElementById('editStatusInput').value,
+            deadline: document.getElementById('editDeadlineInput').value || null
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to update task');
+        }
+
+        const modal = bootstrap.Modal.getInstance(document.getElementById('editTaskModal'));
+        modal.hide();
+        await loadTasks();
+      } catch (error) {
+        console.error('Save task error:', error);
+        showError('Failed to update task. Please try again.');
+      }
+    }
+
+    async function toggleTaskStatus(taskId) {
+      const token = getAuthToken();
+      if (!token) return;
+
+      try {
+        const response = await fetch(`${API_BASE}/api/tasks`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        const data = await response.json();
+        const task = data.tasks.find(t => t._id === taskId);
+        
+        if (!task) return;
+
+        const newStatus = task.status === 'Done' ? 'Pending' : 'Done';
+
+        const updateResponse = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            text: task.text,
+            priority: task.priority,
+            status: newStatus,
+            deadline: task.deadline
+          })
+        });
+
+        if (!updateResponse.ok) {
+          throw new Error('Failed to toggle task status');
+        }
+
+        await loadTasks();
+      } catch (error) {
+        console.error('Toggle status error:', error);
+        showError('Failed to update task status.');
+      }
+    }
+
+    async function deleteTask(taskId) {
+      if (!confirm('Are you sure you want to delete this task?')) return;
+      
+      const token = getAuthToken();
+      if (!token) return;
+
+      try {
+        const response = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to delete task');
+        }
+
+        await loadTasks();
+      } catch (error) {
+        console.error('Delete task error:', error);
+        showError('Failed to delete task. Please try again.');
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', function() {
+      const savedTheme = localStorage.getItem('theme') || 'light';
+      if (savedTheme === 'dark') {
+        document.body.classList.add('dark-mode');
+        document.body.classList.remove('light-mode');
+        const btn = document.querySelector('button[onclick="toggleDarkMode()"]');
+        if (btn) btn.innerHTML = '<i class="fas fa-sun"></i> Light Mode';
+      }
+      
+      loadTasks();
+    });
+
+    document.getElementById('addTaskForm').addEventListener('submit', addTask);
+  </script>
+</body>
+</html>
