@@ -1,6 +1,9 @@
 # Node
+node_modules/
 backend/node_modules/
 backend/package-lock.json
+package-lock.json
+tmpclaude-*
 
 # Environment / secrets
 .env
